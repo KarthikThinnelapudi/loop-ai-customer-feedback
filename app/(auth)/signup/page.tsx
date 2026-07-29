@@ -134,8 +134,10 @@ export default function SignupPage() {
             <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
               <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0 relative group">
                 {logoPreview ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={logoPreview} alt="Logo preview" className="w-full h-full object-cover" />
                 ) : (
+
                   <Building className="w-6 h-6 text-emerald-400" />
                 )}
               </div>

@@ -12,12 +12,8 @@ import {
   Shield,
   X,
   Check,
-  FileText,
-  Activity,
-  UserPlus,
-  ShieldAlert,
-  Inbox,
 } from "lucide-react";
+
 
 interface NotificationItem {
   id: string;

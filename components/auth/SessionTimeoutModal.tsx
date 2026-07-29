@@ -3,14 +3,14 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, ShieldAlert, LogOut, RefreshCw } from "lucide-react";
-import { signOut, useSession } from "next-auth/react";
+import { Clock, LogOut, RefreshCw } from "lucide-react";
+import { signOut } from "next-auth/react";
 
 export default function SessionTimeoutModal() {
   const router = useRouter();
-  const { data: session } = useSession();
   const [showWarning, setShowWarning] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(120);
+
 
   useEffect(() => {
     let inactivityTimer: NodeJS.Timeout;
