@@ -3,7 +3,9 @@
 import { useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
+import SecretKeyMasker from "@/components/common/SecretKeyMasker";
 import { Building, Key, CheckCircle2, Save } from "lucide-react";
+
 
 
 export default function SettingsPage() {
@@ -89,14 +91,18 @@ export default function SettingsPage() {
             Use these keys to send customer feedback from external webhooks (Slack, Intercom, Typeform).
           </p>
 
-          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between font-mono text-xs text-slate-300">
-            <span>loop_live_sk_9921481948194819</span>
-            <button className="px-3 py-1 bg-slate-800 rounded-lg text-slate-200 hover:bg-slate-700 transition">
-              Copy Key
-            </button>
-          </div>
+          <SecretKeyMasker
+            label="Live Ingestion Secret Key"
+            secretKey="loop_live_sk_9921481948194819"
+            prefix="loop_live_sk_"
+            userRole="ADMIN"
+            onRegenerate={() => {
+              // Simulated key regeneration
+            }}
+          />
         </Card>
       </div>
     </DashboardLayout>
   );
 }
+
