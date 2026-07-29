@@ -5,6 +5,7 @@ import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import Breadcrumb from "./Breadcrumb";
 import Modal from "../common/Modal";
+import SessionTimeoutModal from "../auth/SessionTimeoutModal";
 import { Sparkles, Upload } from "lucide-react";
 
 
