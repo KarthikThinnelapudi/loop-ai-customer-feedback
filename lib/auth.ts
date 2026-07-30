@@ -2,6 +2,7 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { IS_DEMO_MODE } from "@/lib/config";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -16,6 +17,24 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // 1. DEMO MODE Fallback Handler
+        if (IS_DEMO_MODE) {
+          const isDemoAdmin = credentials.email === "admin@loop.ai";
+          const isDemoAnalyst = credentials.email === "analyst@loop.ai";
+          const isDemoViewer = credentials.email === "viewer@loop.ai";
+
+          if (isDemoAdmin || isDemoAnalyst || isDemoViewer || credentials.password === "Password123!") {
+            return {
+              id: isDemoAdmin ? "demo-admin-1" : isDemoAnalyst ? "demo-analyst-2" : "demo-viewer-3",
+              name: isDemoAdmin ? "Admin User" : isDemoAnalyst ? "Sarah Analyst" : "John Viewer",
+              email: credentials.email,
+              role: isDemoAdmin ? "ADMIN" : isDemoAnalyst ? "ANALYST" : "VIEWER",
+              workspaceId: "ws_acme_prod_9921",
+            };
+          }
+        }
+
+        // 2. PRODUCTION MODE Database Handler
         const user = await db.user.findUnique({
           where: { email: credentials.email },
           include: {
@@ -29,6 +48,11 @@ export const authOptions: NextAuthOptions = {
 
         if (!user) {
           return null;
+        }
+
+        // Require Email Verification in Production Mode
+        if (!IS_DEMO_MODE && user.isVerified === false) {
+          throw new Error("EmailNotVerified: Please verify your email before logging in.");
         }
 
         const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
@@ -75,4 +99,3 @@ export const authOptions: NextAuthOptions = {
   },
   secret: process.env.NEXTAUTH_SECRET || "fallback_secret_for_loop_ai",
 };
-

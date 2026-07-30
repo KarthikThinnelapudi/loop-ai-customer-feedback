@@ -36,6 +36,8 @@ model User {
   email         String            @unique
   password      String
   image         String?
+  emailVerified DateTime?
+  isVerified    Boolean           @default(false)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
@@ -44,6 +46,7 @@ model User {
   createdReports  Report[]
   sessions        Session[]
   accounts        Account[]
+  auditLogs       AuditLog[]
 }
 
 model Workspace {
@@ -62,6 +65,7 @@ model Workspace {
   feedback    Feedback[]
   themes      FeedbackTheme[]
   reports     Report[]
+  auditLogs   AuditLog[]
 }
 
 model WorkspaceMember {
@@ -109,6 +113,7 @@ model Feedback {
   customerName   String?
   customerEmail  String?
   themeId        String?
+  deletedAt      DateTime?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
@@ -119,6 +124,7 @@ model Feedback {
   @@index([workspaceId])
   @@index([status])
   @@index([channel])
+  @@index([deletedAt])
 }
 
 model Report {
@@ -137,6 +143,23 @@ model Report {
   author       User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  workspaceId String
+  userId      String?
+  action      String
+  entityType  String
+  entityId    String?
+  details     String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([userId])
 }
 
 model Session {

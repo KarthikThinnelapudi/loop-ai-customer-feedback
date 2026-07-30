@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { IS_DEMO_MODE } from "@/lib/config";
 
 const registerSchema = z.object({
   workspaceName: z.string().min(2, "Workspace name must be at least 2 characters"),
@@ -10,7 +11,11 @@ const registerSchema = z.object({
   teamSize: z.string().optional(),
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number"),
 });
 
 export async function POST(req: Request) {
@@ -24,20 +29,29 @@ export async function POST(req: Request) {
 
     if (existingUser) {
       return NextResponse.json(
-        { message: "User with this email already exists." },
+        { message: "User with this email address already exists." },
         { status: 400 }
       );
     }
 
-    const hashedPassword = await bcrypt.hash(validatedData.password, 10);
-    const slug = validatedData.workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const slugCandidate = validatedData.workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const existingWorkspace = await db.workspace.findFirst({
+      where: { slug: slugCandidate },
+    });
 
-    // Atomic transaction: Create Workspace -> User -> WorkspaceMember
+    const slug = existingWorkspace
+      ? `${slugCandidate}-${Math.floor(1000 + Math.random() * 9000)}`
+      : slugCandidate;
+
+    const hashedPassword = await bcrypt.hash(validatedData.password, 10);
+    const requiresVerification = !IS_DEMO_MODE;
+
+    // Atomic transaction: Workspace -> User -> WorkspaceMember -> VerificationToken
     const result = await db.$transaction(async (tx) => {
       const workspace = await tx.workspace.create({
         data: {
           name: validatedData.workspaceName,
-          slug: `${slug}-${Math.floor(1000 + Math.random() * 9000)}`,
+          slug,
           description: validatedData.description,
           industry: validatedData.industry || "SaaS / Software",
           teamSize: validatedData.teamSize || "11-50 Employees",
@@ -50,6 +64,8 @@ export async function POST(req: Request) {
           name: validatedData.name,
           email: validatedData.email,
           password: hashedPassword,
+          isVerified: !requiresVerification,
+          emailVerified: requiresVerification ? null : new Date(),
         },
       });
 
@@ -61,14 +77,49 @@ export async function POST(req: Request) {
         },
       });
 
+      // Default Themes/Categories Creation
+      await tx.feedbackTheme.createMany({
+        data: [
+          { workspaceId: workspace.id, title: "Onboarding Experience", color: "rose", growthRate: 12.0 },
+          { workspaceId: workspace.id, title: "Dashboard & UI Speed", color: "emerald", growthRate: 45.0 },
+          { workspaceId: workspace.id, title: "SSO & SAML Security", color: "amber", growthRate: 25.0 },
+        ],
+      });
+
+      // Create Verification Token if in Production Mode
+      if (requiresVerification) {
+        const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        await tx.verificationToken.create({
+          data: {
+            identifier: validatedData.email,
+            token,
+            expires: new Date(Date.now() + 24 * 3600 * 1000), // 24 Hours
+          },
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          workspaceId: workspace.id,
+          userId: user.id,
+          action: "WORKSPACE_REGISTERED",
+          entityType: "Workspace",
+          entityId: workspace.id,
+          details: `Created workspace ${workspace.name} and Admin account for ${user.email}`,
+        },
+      });
+
       return { workspace, user };
     });
 
     return NextResponse.json(
       {
-        message: "Workspace and Admin account created successfully.",
+        message: requiresVerification
+          ? "Account registered! A verification link has been sent to your email. Please verify before signing in."
+          : "Workspace and Admin account created successfully.",
         workspaceId: result.workspace.id,
         userId: result.user.id,
+        requiresVerification,
       },
       { status: 201 }
     );
@@ -86,4 +137,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
