@@ -19,13 +19,17 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (session?.user) {
-      if (session.user.name) setName(session.user.name);
-      if (session.user.email) setEmail(session.user.email);
-      if ((session.user as { role?: string }).role) {
-        setRole((session.user as { role?: string }).role || "ADMIN");
-      }
+      const handle = requestAnimationFrame(() => {
+        if (session.user?.name) setName(session.user.name);
+        if (session.user?.email) setEmail(session.user.email);
+        if ((session.user as { role?: string })?.role) {
+          setRole((session.user as { role?: string }).role || "ADMIN");
+        }
+      });
+      return () => cancelAnimationFrame(handle);
     }
   }, [session]);
+
 
   const initials = name
     .split(" ")
