@@ -25,8 +25,10 @@ export default function MotionWrapper({
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    /* eslint-disable-next-line react-hooks/set-state-in-effect */
     setMounted(true);
   }, []);
+
 
   // SSR Fallback: Render static standard HTML tag with full visibility
   if (!mounted) {

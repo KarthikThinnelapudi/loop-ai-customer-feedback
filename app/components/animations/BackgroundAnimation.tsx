@@ -7,8 +7,10 @@ export default function BackgroundAnimation() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    /* eslint-disable-next-line react-hooks/set-state-in-effect */
     setMounted(true);
   }, []);
+
 
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
