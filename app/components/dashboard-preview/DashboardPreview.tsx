@@ -1,12 +1,12 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { TrendingUp, Smile, AlertTriangle, MessageSquare, Layers, Sparkles } from "lucide-react";
+import MotionWrapper from "@/components/common/MotionWrapper";
 
 export default function DashboardPreview() {
   return (
     <section id="dashboard-preview" className="relative py-20 px-6 max-w-6xl mx-auto z-10">
-      <motion.div
+      <MotionWrapper
         initial={{ opacity: 0, y: 40 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
@@ -14,6 +14,7 @@ export default function DashboardPreview() {
         className="rounded-3xl border border-slate-800 bg-slate-900/80 backdrop-blur-2xl p-6 md:p-8 shadow-[0_0_80px_rgba(16,185,129,0.12)]"
       >
         {/* Mock Topbar */}
+
         <div className="flex items-center justify-between border-b border-slate-800/80 pb-5 mb-8">
           <div className="flex items-center gap-3">
             <div className="flex gap-2">
@@ -129,7 +130,8 @@ export default function DashboardPreview() {
 
           </div>
         </div>
-      </motion.div>
+      </MotionWrapper>
     </section>
   );
 }
+

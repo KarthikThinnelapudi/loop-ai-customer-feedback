@@ -1,51 +1,54 @@
 "use client";
 
-import { motion } from "framer-motion";
 import Link from "next/link";
 import { Sparkles, ArrowRight, Play, ShieldCheck, Zap, BarChart3 } from "lucide-react";
+import MotionWrapper from "@/components/common/MotionWrapper";
 
 export default function Hero() {
   return (
     <section className="relative pt-32 pb-20 px-6 max-w-7xl mx-auto text-center z-10">
       {/* Badge */}
-      <motion.div
+      <MotionWrapper
         initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        whileInView={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm font-medium backdrop-blur-md mb-8"
       >
         <Sparkles className="w-4 h-4 text-emerald-400" />
         <span>Enterprise AI Feedback Intelligence</span>
         <span className="bg-emerald-500/20 text-emerald-300 text-xs px-2 py-0.5 rounded-full font-semibold">v2.0</span>
-      </motion.div>
+      </MotionWrapper>
 
       {/* Main Headline */}
-      <motion.h1
+      <MotionWrapper
         initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        whileInView={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.1 }}
-        className="text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight text-white leading-[1.1]"
       >
-        Close the Loop on <br className="hidden sm:inline" />
-        <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
-          Customer Feedback
-        </span>
-      </motion.h1>
+        <h1 className="text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight text-white leading-[1.1]">
+          Close the Loop on <br className="hidden sm:inline" />
+          <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
+            Customer Feedback
+          </span>
+        </h1>
+      </MotionWrapper>
 
       {/* Subtitle */}
-      <motion.p
+      <MotionWrapper
         initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        whileInView={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.2 }}
         className="mt-8 text-lg md:text-xl text-slate-300 max-w-3xl mx-auto leading-relaxed font-normal"
       >
-        LOOP turns scattered tickets, reviews, NPS surveys, and sales notes into ranked, evidence-backed insights and actionable product decisions.
-      </motion.p>
+        <p>
+          LOOP turns scattered tickets, reviews, NPS surveys, and sales notes into ranked, evidence-backed insights and actionable product decisions.
+        </p>
+      </MotionWrapper>
 
       {/* Action Buttons */}
-      <motion.div
+      <MotionWrapper
         initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        whileInView={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.3 }}
         className="mt-10 flex flex-col sm:flex-row justify-center items-center gap-4 sm:gap-6"
       >
@@ -64,12 +67,12 @@ export default function Hero() {
           <Play className="w-4 h-4 fill-current text-emerald-400" />
           <span>Explore Demo</span>
         </a>
-      </motion.div>
+      </MotionWrapper>
 
       {/* Metrics Counter Pill */}
-      <motion.div
+      <MotionWrapper
         initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
+        whileInView={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, delay: 0.4 }}
         className="mt-16 grid grid-cols-2 md:grid-cols-3 gap-6 max-w-4xl mx-auto p-6 rounded-2xl border border-slate-800 bg-slate-950/60 backdrop-blur-xl"
       >
@@ -96,7 +99,8 @@ export default function Hero() {
           </div>
           <span className="text-sm text-slate-400 mt-1">Product Teams Empowered</span>
         </div>
-      </motion.div>
+      </MotionWrapper>
     </section>
   );
 }
+

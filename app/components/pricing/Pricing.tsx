@@ -1,8 +1,8 @@
 "use client";
 
-import { motion } from "framer-motion";
 import Link from "next/link";
 import { Check, Sparkles, Zap } from "lucide-react";
+import MotionWrapper from "@/components/common/MotionWrapper";
 
 const plans = [
   {
@@ -72,7 +72,7 @@ export default function Pricing() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
         {plans.map((plan, index) => (
-          <motion.div
+          <MotionWrapper
             key={plan.name}
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -121,9 +121,10 @@ export default function Pricing() {
             >
               {plan.cta}
             </Link>
-          </motion.div>
+          </MotionWrapper>
         ))}
       </div>
     </section>
   );
 }
+

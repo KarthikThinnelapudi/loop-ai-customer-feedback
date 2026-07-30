@@ -1,7 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { Target, Users, Headphones, BarChart2 } from "lucide-react";
+import MotionWrapper from "@/components/common/MotionWrapper";
 
 const cases = [
   {
@@ -46,7 +46,7 @@ export default function UseCases() {
         {cases.map((c, i) => {
           const IconComp = c.icon;
           return (
-            <motion.div
+            <MotionWrapper
               key={c.title}
               initial={{ opacity: 0, scale: 0.95 }}
               whileInView={{ opacity: 1, scale: 1 }}
@@ -66,10 +66,11 @@ export default function UseCases() {
                 <h3 className="text-xl font-bold text-white mb-2">{c.title}</h3>
                 <p className="text-slate-400 text-sm leading-relaxed">{c.description}</p>
               </div>
-            </motion.div>
+            </MotionWrapper>
           );
         })}
       </div>
     </section>
   );
 }
+

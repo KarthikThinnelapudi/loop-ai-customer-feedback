@@ -1,7 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { Sparkles, Layers, Cpu, Search, FileText, Database, ShieldCheck, Zap } from "lucide-react";
+import MotionWrapper from "@/components/common/MotionWrapper";
 
 const featuresList = [
   {
@@ -75,7 +75,7 @@ export default function Features() {
         {featuresList.map((item, index) => {
           const IconComponent = item.icon;
           return (
-            <motion.div
+            <MotionWrapper
               key={item.title}
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -93,10 +93,11 @@ export default function Features() {
               <p className="text-slate-400 leading-relaxed text-sm">
                 {item.description}
               </p>
-            </motion.div>
+            </MotionWrapper>
           );
         })}
       </div>
     </section>
   );
 }
+

@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import MotionWrapper from "@/components/common/MotionWrapper";
 
 const brands = ["Acme Corp", "Linear", "Vercel", "Supabase", "Retool", "Stripe"];
 
@@ -14,8 +14,9 @@ export default function TrustedBrands() {
 
         <div className="flex flex-wrap items-center justify-center gap-10 md:gap-16 opacity-70">
           {brands.map((brand, i) => (
-            <motion.span
+            <MotionWrapper
               key={brand}
+              as="span"
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
@@ -23,10 +24,11 @@ export default function TrustedBrands() {
               className="text-lg md:text-xl font-bold text-slate-300 tracking-wider hover:text-emerald-400 transition-colors cursor-pointer select-none"
             >
               {brand}
-            </motion.span>
+            </MotionWrapper>
           ))}
         </div>
       </div>
     </section>
   );
 }
+
