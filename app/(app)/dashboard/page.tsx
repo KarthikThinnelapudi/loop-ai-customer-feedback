@@ -29,7 +29,7 @@ import {
 } from "recharts";
 
 // Mock Recharts Data
-const defaultVolumeData = [
+const volumeData = [
   { date: "Mon", total: 45, positive: 32, negative: 13 },
   { date: "Tue", total: 68, positive: 50, negative: 18 },
   { date: "Wed", total: 85, positive: 65, negative: 20 },
@@ -38,6 +38,7 @@ const defaultVolumeData = [
   { date: "Sat", total: 55, positive: 45, negative: 10 },
   { date: "Sun", total: 72, positive: 58, negative: 14 },
 ];
+
 
 const sentimentData = [
   { name: "Positive", value: 68, color: "#10B981" },
