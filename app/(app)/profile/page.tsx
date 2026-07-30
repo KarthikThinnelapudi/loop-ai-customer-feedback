@@ -7,7 +7,9 @@ import Card from "@/components/common/Card";
 import { User, Lock, Save, CheckCircle2 } from "lucide-react";
 
 export default function ProfilePage() {
-  const { data: session } = useSession();
+  const sessionRes = useSession();
+  const session = sessionRes ? sessionRes.data : null;
+
   const [name, setName] = useState("Alex Mercer");
   const [email, setEmail] = useState("alex@loop.ai");
   const [role, setRole] = useState("ADMIN");
