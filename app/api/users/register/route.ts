@@ -75,7 +75,7 @@ export async function POST(req: Request) {
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { message: error.errors[0]?.message || "Validation error" },
+        { message: error.issues[0]?.message || "Validation error" },
         { status: 400 }
       );
     }
@@ -86,3 +86,4 @@ export async function POST(req: Request) {
     );
   }
 }
+
