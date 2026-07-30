@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import AuthProvider from "@/components/providers/AuthProvider";
 
 export const metadata: Metadata = {
   title: "LOOP AI — Customer Feedback Intelligence Platform",
@@ -14,9 +15,8 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased dark">
       <body className="min-h-full flex flex-col bg-slate-950 text-white font-sans">
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
 }
-
