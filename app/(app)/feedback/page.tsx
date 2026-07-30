@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
 import SearchBar from "@/components/common/SearchBar";
@@ -15,8 +15,6 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-
-
 
 interface FeedbackItem {
   id: string;
@@ -59,45 +57,6 @@ const mockFeedbackData: FeedbackItem[] = [
     createdAt: "2026-07-28 12:15",
     rationale: "High satisfaction praised regarding dashboard loading velocity and visual redesign.",
   },
-  {
-    id: "fb-103",
-    content: "Prospect wants SSO SAML integration before signing the enterprise tier. Blocked until Q3.",
-    channel: "SALES_CALL_NOTE",
-    customerLabel: "Enterprise Account Rep",
-    sentiment: "NEU",
-    sentimentScore: 0.05,
-    status: "ACTIONED",
-    featureArea: "Security & Auth",
-    themes: ["SSO SAML Request", "Enterprise Blockers"],
-    createdAt: "2026-07-27 18:45",
-    rationale: "Neutral feature request for SAML single sign-on authentication requirement.",
-  },
-  {
-    id: "fb-104",
-    content: "Billing page keeps timing out when I try to download PDF invoice for finance audit.",
-    channel: "SUPPORT_TICKET",
-    customerLabel: "Michael R. (Retool)",
-    sentiment: "NEG",
-    sentimentScore: -0.75,
-    status: "NEW",
-    featureArea: "Billing & Invoicing",
-    themes: ["Billing Timeout", "PDF Export Bug"],
-    createdAt: "2026-07-27 09:20",
-    rationale: "Urgent issue reported regarding server timeout on billing invoice download endpoint.",
-  },
-  {
-    id: "fb-105",
-    content: "Love the new Ask LOOP grounded AI chat feature, saved me hours compiling feedback reports today!",
-    channel: "COMMUNITY_POST",
-    customerLabel: "Elena T. (Supabase)",
-    sentiment: "POS",
-    sentimentScore: 0.95,
-    status: "REVIEWED",
-    featureArea: "AI Features",
-    themes: ["Ask LOOP RAG", "VoC Reports"],
-    createdAt: "2026-07-26 16:10",
-    rationale: "Customer highlight praising RAG Q&A utility for executive reporting.",
-  },
 ];
 
 export default function FeedbackInboxPage() {
@@ -107,6 +66,43 @@ export default function FeedbackInboxPage() {
   const [selectedItem, setSelectedItem] = useState<FeedbackItem | null>(null);
   const [data, setData] = useState<FeedbackItem[]>(mockFeedbackData);
   const [reclassifyingId, setReclassifyingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/feedback")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((apiData) => {
+        if (Array.isArray(apiData) && apiData.length > 0) {
+          const mapped = apiData.map((item: {
+            id: string;
+            content: string;
+            channel: string;
+            customerName?: string;
+            sentimentLabel?: string;
+            sentimentScore?: number;
+            status?: string;
+            createdAt?: string;
+            theme?: { title: string };
+          }) => ({
+            id: item.id,
+            content: item.content,
+            channel: item.channel,
+            customerLabel: item.customerName || "Customer Feedback",
+            sentiment: (item.sentimentLabel === "POSITIVE" ? "POS" : item.sentimentLabel === "NEGATIVE" ? "NEG" : "NEU") as "POS" | "NEU" | "NEG",
+            sentimentScore: item.sentimentScore || 0,
+            status: (item.status || "NEW") as "NEW" | "REVIEWED" | "ACTIONED",
+            featureArea: item.theme?.title || "Customer Experience",
+            themes: [item.theme?.title || "Feedback"],
+            createdAt: item.createdAt ? new Date(item.createdAt).toISOString().replace("T", " ").substring(0, 16) : "Just now",
+            rationale: `AI auto-classified with sentiment score ${item.sentimentScore || 0}.`,
+          }));
+          setData(mapped);
+        }
+      })
+      .catch(() => {
+        // Fallback to initial mock data if offline
+      });
+  }, []);
+
 
   const filteredData = data.filter((item) => {
     const matchesSearch =

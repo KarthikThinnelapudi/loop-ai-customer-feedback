@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
 import {
@@ -29,7 +29,7 @@ import {
 } from "recharts";
 
 // Mock Recharts Data
-const volumeData = [
+const defaultVolumeData = [
   { date: "Mon", total: 45, positive: 32, negative: 13 },
   { date: "Tue", total: 68, positive: 50, negative: 18 },
   { date: "Wed", total: 85, positive: 65, negative: 20 },
@@ -45,7 +45,7 @@ const sentimentData = [
   { name: "Negative", value: 14, color: "#EF4444" },
 ];
 
-const topThemesData = [
+const defaultThemesData = [
   { theme: "Dashboard Speed", count: 89, sentiment: 0.9 },
   { theme: "Onboarding Friction", count: 42, sentiment: -0.6 },
   { theme: "SSO & SAML Request", count: 35, sentiment: 0.1 },
@@ -85,6 +85,32 @@ const recentActivity = [
 
 export default function DashboardPage() {
   const [timeRange, setTimeRange] = useState("7d");
+  const [totalVolume, setTotalVolume] = useState(548);
+  const [positiveRatio, setPositiveRatio] = useState("82.4%");
+  const [criticalSpikesCount, setCriticalSpikesCount] = useState(3);
+  const [topThemes, setTopThemes] = useState(defaultThemesData);
+
+  useEffect(() => {
+    fetch("/api/dashboard/stats")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((stats) => {
+        if (stats) {
+          if (stats.totalVolume) setTotalVolume(stats.totalVolume);
+          if (stats.positiveRatio) setPositiveRatio(stats.positiveRatio);
+          if (stats.criticalSpikesCount !== undefined) setCriticalSpikesCount(stats.criticalSpikesCount);
+          if (Array.isArray(stats.themes) && stats.themes.length > 0) {
+            setTopThemes(stats.themes.map((t: { title: string; mentions?: number; count?: number }) => ({
+              theme: t.title,
+              count: t.mentions || t.count || 20,
+              sentiment: 0.8,
+            })));
+          }
+        }
+      })
+      .catch(() => {
+        // Fallback to initial state if offline
+      });
+  }, []);
 
   return (
     <DashboardLayout>
@@ -139,7 +165,7 @@ export default function DashboardPage() {
             <span>Total Feedback</span>
             <MessageSquare className="w-4 h-4 text-emerald-400" />
           </div>
-          <h3 className="text-3xl font-bold mt-2 text-white">548</h3>
+          <h3 className="text-3xl font-bold mt-2 text-white">{totalVolume}</h3>
           <div className="flex items-center gap-1.5 mt-2 text-xs text-emerald-400 font-semibold">
             <TrendingUp className="w-3.5 h-3.5" />
             <span>+18.4% from last period</span>
@@ -151,7 +177,7 @@ export default function DashboardPage() {
             <span>Sentiment Score</span>
             <Smile className="w-4 h-4 text-emerald-400" />
           </div>
-          <h3 className="text-3xl font-bold mt-2 text-emerald-400">82.4%</h3>
+          <h3 className="text-3xl font-bold mt-2 text-emerald-400">{positiveRatio}</h3>
           <p className="text-slate-400 text-xs mt-2">68% Pos / 18% Neu / 14% Neg</p>
         </Card>
 
@@ -160,7 +186,7 @@ export default function DashboardPage() {
             <span>Active AI Clusters</span>
             <Layers className="w-4 h-4 text-teal-400" />
           </div>
-          <h3 className="text-3xl font-bold mt-2 text-teal-300">14 Themes</h3>
+          <h3 className="text-3xl font-bold mt-2 text-teal-300">{topThemes.length} Themes</h3>
           <p className="text-slate-400 text-xs mt-2">2 themes spiking in volume</p>
         </Card>
 
@@ -169,10 +195,11 @@ export default function DashboardPage() {
             <span>Needs Action</span>
             <AlertTriangle className="w-4 h-4 text-rose-400" />
           </div>
-          <h3 className="text-3xl font-bold mt-2 text-rose-400">12 Items</h3>
+          <h3 className="text-3xl font-bold mt-2 text-rose-400">{criticalSpikesCount} Critical</h3>
           <p className="text-slate-400 text-xs mt-2">High severity negative quotes</p>
         </Card>
       </div>
+
 
       {/* Main Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -286,7 +313,8 @@ export default function DashboardPage() {
 
           <div className="h-64 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart layout="vertical" data={topThemesData} margin={{ left: 20 }}>
+              <BarChart layout="vertical" data={topThemes} margin={{ left: 20 }}>
+
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
                 <XAxis type="number" stroke="#64748b" fontSize={11} />
                 <YAxis dataKey="theme" type="category" stroke="#94a3b8" fontSize={11} width={130} />

@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
 import Modal from "@/components/common/Modal";
 import { Users, UserPlus, Shield, Trash2 } from "lucide-react";
-
 
 interface Member {
   id: string;
@@ -19,7 +18,6 @@ const mockMembers: Member[] = [
   { id: "m-1", name: "Alex Mercer", email: "alex@acme.com", role: "ADMIN", status: "ACTIVE" },
   { id: "m-2", name: "Sarah Jenkins", email: "sarah@acme.com", role: "ANALYST", status: "ACTIVE" },
   { id: "m-3", name: "David Kim", email: "david@acme.com", role: "VIEWER", status: "ACTIVE" },
-  { id: "m-4", name: "Elena Rostova", email: "elena@acme.com", role: "ANALYST", status: "PENDING" },
 ];
 
 export default function TeamPage() {
@@ -28,19 +26,72 @@ export default function TeamPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "ANALYST" | "VIEWER">("ANALYST");
 
-  const handleInvite = (e: React.FormEvent) => {
+  useEffect(() => {
+    fetch("/api/members")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((apiMembers) => {
+        if (Array.isArray(apiMembers) && apiMembers.length > 0) {
+          const mapped = apiMembers.map((m: { id: string; role: string; user: { name?: string; email: string } }) => ({
+            id: m.id,
+            name: m.user?.name || m.user?.email.split("@")[0],
+            email: m.user?.email,
+            role: m.role as "ADMIN" | "ANALYST" | "VIEWER",
+            status: "ACTIVE" as const,
+          }));
+          setMembers(mapped);
+        }
+      })
+      .catch(() => {
+        // Fallback to initial seed preview if offline
+      });
+  }, []);
+
+  const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newMember: Member = {
-      id: `m-${Date.now()}`,
-      name: inviteEmail.split("@")[0],
-      email: inviteEmail,
-      role: inviteRole,
-      status: "PENDING",
-    };
-    setMembers([...members, newMember]);
+    try {
+      const res = await fetch("/api/members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: inviteEmail,
+          role: inviteRole,
+        }),
+      });
+
+      if (res.ok) {
+        const newMemberData = await res.json();
+        const newMember: Member = {
+          id: newMemberData.id,
+          name: newMemberData.user?.name || inviteEmail.split("@")[0],
+          email: inviteEmail,
+          role: inviteRole,
+          status: "PENDING",
+        };
+        setMembers((prev) => [...prev, newMember]);
+      } else {
+        const newMember: Member = {
+          id: `m-${Date.now()}`,
+          name: inviteEmail.split("@")[0],
+          email: inviteEmail,
+          role: inviteRole,
+          status: "PENDING",
+        };
+        setMembers((prev) => [...prev, newMember]);
+      }
+    } catch {
+      const newMember: Member = {
+        id: `m-${Date.now()}`,
+        name: inviteEmail.split("@")[0],
+        email: inviteEmail,
+        role: inviteRole,
+        status: "PENDING",
+      };
+      setMembers((prev) => [...prev, newMember]);
+    }
     setShowInviteModal(false);
     setInviteEmail("");
   };
+
 
   const handleRoleChange = (id: string, newRole: "ADMIN" | "ANALYST" | "VIEWER") => {
     setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, role: newRole } : m)));

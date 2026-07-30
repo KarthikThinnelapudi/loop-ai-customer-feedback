@@ -1,12 +1,14 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
+import { db } from "@/lib/db";
 
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: "Credentials",
       credentials: {
-        email: { label: "Email", type: "email", placeholder: "user@company.com" },
+        email: { label: "Email", type: "email", placeholder: "admin@loop.ai" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
@@ -14,13 +16,34 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        // Demo fallback user or database user check
+        const user = await db.user.findUnique({
+          where: { email: credentials.email },
+          include: {
+            memberships: {
+              include: {
+                workspace: true,
+              },
+            },
+          },
+        });
+
+        if (!user) {
+          return null;
+        }
+
+        const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
+        if (!isPasswordValid) {
+          return null;
+        }
+
+        const primaryMembership = user.memberships[0];
+
         return {
-          id: "usr_demo_1",
-          name: credentials.email.split("@")[0],
-          email: credentials.email,
-          role: "ADMIN",
-          workspaceId: "ws_acme_prod_9921",
+          id: user.id,
+          name: user.name || user.email.split("@")[0],
+          email: user.email,
+          role: primaryMembership?.role || "ADMIN",
+          workspaceId: primaryMembership?.workspaceId || "ws_acme_prod_9921",
         };
       },
     }),
@@ -42,7 +65,7 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
-      if (session.user) {
+      if (session?.user) {
         (session.user as { id?: string }).id = token.id as string;
         (session.user as { role?: string }).role = token.role as string;
         (session.user as { workspaceId?: string }).workspaceId = token.workspaceId as string;
@@ -52,3 +75,4 @@ export const authOptions: NextAuthOptions = {
   },
   secret: process.env.NEXTAUTH_SECRET || "fallback_secret_for_loop_ai",
 };
+

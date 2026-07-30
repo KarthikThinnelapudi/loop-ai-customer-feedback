@@ -1,24 +1,179 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../app/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url     = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
+enum Role {
+  ADMIN
+  MANAGER
+  MEMBER
+  ANALYST
+  VIEWER
+}
+
+enum FeedbackStatus {
+  NEW
+  REVIEWED
+  ACTIONED
+}
+
+enum FeedbackChannel {
+  SUPPORT_TICKET
+  APP_STORE_REVIEW
+  NPS_SURVEY
+  SALES_CALL_NOTE
+  COMMUNITY_POST
+}
+
 model User {
-  id  String   @id  @default(cuid())
-name   String?
-email  String  @unique
-password  String
-createdAt DateTime @default(now())
-updatedAt DateTime @updatedAt
+  id            String            @id @default(uuid())
+  name          String?
+  email         String            @unique
+  password      String
+  image         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  memberships     WorkspaceMember[]
+  createdFeedback Feedback[]
+  createdReports  Report[]
+  sessions        Session[]
+  accounts        Account[]
+}
+
+model Workspace {
+  id          String            @id @default(uuid())
+  name        String
+  slug        String            @unique
+  description String?
+  logo        String?
+  industry    String?
+  teamSize    String?
+  apiKey      String            @unique @default(uuid())
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  members     WorkspaceMember[]
+  feedback    Feedback[]
+  themes      FeedbackTheme[]
+  reports     Report[]
+}
+
+model WorkspaceMember {
+  id          String    @id @default(uuid())
+  workspaceId String
+  userId      String
+  role        Role      @default(MEMBER)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+}
+
+model FeedbackTheme {
+  id          String     @id @default(uuid())
+  workspaceId String
+  title       String
+  description String?
+  color       String?    @default("emerald")
+  growthRate  Float      @default(0.0)
+  isSpike     Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  feedbacks   Feedback[]
+
+  @@index([workspaceId])
+}
+
+model Feedback {
+  id             String          @id @default(uuid())
+  workspaceId    String
+  authorId       String?
+  content        String          @db.Text
+  channel        FeedbackChannel @default(SUPPORT_TICKET)
+  sentimentScore Float           @default(0.0)
+  sentimentLabel String          @default("NEUTRAL")
+  status         FeedbackStatus  @default(NEW)
+  customerName   String?
+  customerEmail  String?
+  themeId        String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  author         User?           @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  theme          FeedbackTheme?  @relation(fields: [themeId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([channel])
+}
+
+model Report {
+  id           String    @id @default(uuid())
+  workspaceId  String
+  authorId     String?
+  title        String
+  summary      String    @db.Text
+  totalItems   Int       @default(0)
+  avgSentiment Float     @default(0.0)
+  pdfUrl       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  author       User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }
