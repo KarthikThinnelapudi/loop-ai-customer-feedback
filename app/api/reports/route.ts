@@ -3,43 +3,43 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
-import { IS_DEMO_MODE } from "@/lib/config";
+import { hasPermission } from "@/lib/rbac";
 
-const generateReportSchema = z.object({
-  title: z.string().min(3, "Report title is required"),
+const createReportSchema = z.object({
+  title: z.string().min(3, "Title required").optional(),
 });
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    let workspaceId = "ws_acme_prod_9921";
-
-    if (session?.user?.email) {
-      const user = await db.user.findUnique({
-        where: { email: session.user.email },
-        include: { memberships: true },
-      });
-      if (user?.memberships?.[0]?.workspaceId) {
-        workspaceId = user.memberships[0].workspaceId;
-      }
+    if (!session?.user?.email) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    if (IS_DEMO_MODE) {
-      return NextResponse.json([
-        {
-          id: "rep-101",
-          title: "Weekly Voice-of-Customer Executive Digest",
-          summary: "Customer sentiment improved +6.4% this week. Onboarding friction was identified as top spiking theme.",
-          totalItems: 120,
-          avgSentiment: 0.84,
-          createdAt: new Date().toISOString(),
-        },
-      ]);
+    const currentUser = await db.user.findUnique({
+      where: { email: session.user.email },
+      include: { memberships: true },
+    });
+
+    const workspaceId = currentUser?.memberships[0]?.workspaceId;
+    if (!workspaceId) {
+      return NextResponse.json({ message: "Workspace required" }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const search = searchParams.get("search") || "";
+
+    const where: Record<string, unknown> = { workspaceId };
+    if (search) {
+      where.title = { contains: search, mode: "insensitive" };
     }
 
     const reports = await db.report.findMany({
-      where: { workspaceId },
+      where,
       orderBy: { createdAt: "desc" },
+      include: {
+        author: { select: { name: true, email: true } },
+      },
     });
 
     return NextResponse.json(reports);
@@ -61,35 +61,52 @@ export async function POST(req: Request) {
       include: { memberships: true },
     });
 
-    const userMembership = currentUser?.memberships[0];
-    if (!userMembership || (userMembership.role !== "ADMIN" && userMembership.role !== "ANALYST")) {
+    if (!currentUser) {
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
+    }
+
+    const userMembership = currentUser.memberships[0];
+    const role = userMembership?.role || "VIEWER";
+    const workspaceId = userMembership?.workspaceId;
+
+    if (!workspaceId) {
+      return NextResponse.json({ message: "Workspace required" }, { status: 403 });
+    }
+
+    if (!hasPermission(role, "reports:generate")) {
       return NextResponse.json(
-        { message: "Forbidden: Only Admin or Analyst roles can generate VoC reports." },
+        { message: "Forbidden: Viewer role cannot generate reports." },
         { status: 403 }
       );
     }
 
-    const workspaceId = userMembership.workspaceId;
-    const body = await req.json();
-    const { title } = generateReportSchema.parse(body);
+    const body = await req.json().catch(() => ({}));
+    const { title } = createReportSchema.parse(body);
 
-    // Compute live metrics from dataset
-    const totalItems = await db.feedback.count({
-      where: { workspaceId, deletedAt: null },
-    });
+    // 1-Click VoC Digest: Aggregate feedback stats from DB
+    const [totalItems, avgSentimentResult, topThemes] = await Promise.all([
+      db.feedback.count({ where: { workspaceId, deletedAt: null } }),
+      db.feedback.aggregate({
+        where: { workspaceId, deletedAt: null },
+        _avg: { sentimentScore: true },
+      }),
+      db.feedbackTheme.findMany({
+        where: { workspaceId },
+        take: 3,
+      }),
+    ]);
 
-    const positiveCount = await db.feedback.count({
-      where: { workspaceId, sentimentLabel: "POSITIVE", deletedAt: null },
-    });
+    const avgSentiment = avgSentimentResult._avg.sentimentScore || 0.65;
+    const themeTitles = topThemes.map((t) => t.title).join(", ") || "Customer Onboarding & App Speed";
 
-    const avgSentiment = totalItems > 0 ? Number((positiveCount / totalItems).toFixed(2)) : 0.84;
-    const summary = `Generated VoC Executive Digest for ${totalItems} customer feedback records. Overall positive sentiment ratio is ${(avgSentiment * 100).toFixed(1)}%. Key priorities focus on onboarding speed and dashboard performance.`;
+    const reportTitle = title || `Executive VoC Digest — ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+    const summary = `Analyzed ${totalItems} customer feedback items. Overall sentiment index is ${(avgSentiment * 100).toFixed(0)}%. Key customer focus areas include ${themeTitles}.`;
 
-    const report = await db.report.create({
+    const newReport = await db.report.create({
       data: {
         workspaceId,
         authorId: currentUser.id,
-        title,
+        title: reportTitle,
         summary,
         totalItems,
         avgSentiment,
@@ -102,12 +119,12 @@ export async function POST(req: Request) {
         userId: currentUser.id,
         action: "REPORT_GENERATED",
         entityType: "Report",
-        entityId: report.id,
-        details: `Generated executive VoC report: "${title}"`,
+        entityId: newReport.id,
+        details: `Generated VoC digest for ${totalItems} feedback items.`,
       },
     });
 
-    return NextResponse.json(report, { status: 201 });
+    return NextResponse.json(newReport, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ message: error.issues[0]?.message }, { status: 400 });

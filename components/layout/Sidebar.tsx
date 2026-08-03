@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
 import {
   LayoutDashboard,
   Inbox,
@@ -21,26 +22,31 @@ import {
 } from "lucide-react";
 
 import LoopLogo from "@/app/components/logo/LoopLogo";
-import { signOut } from "next-auth/react";
 
-const navItems = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Feedback Inbox", href: "/feedback", icon: Inbox, badge: "12" },
-  { label: "Analytics", href: "/analytics", icon: BarChart3 },
-  { label: "Ask LOOP AI", href: "/ask", icon: Sparkles, highlight: true },
-  { label: "Trends & Spikes", href: "/trends", icon: TrendingUp },
-  { label: "VoC Reports", href: "/reports", icon: FileText },
+const allNavItems = [
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["ADMIN", "OWNER", "MANAGER", "ANALYST", "ANALYST_ASSISTANT", "REVIEWER", "VIEWER", "MEMBER"] },
+  { label: "Feedback Inbox", href: "/feedback", icon: Inbox, badge: "12", roles: ["ADMIN", "OWNER", "MANAGER", "ANALYST", "ANALYST_ASSISTANT", "REVIEWER", "VIEWER", "MEMBER"] },
+  { label: "Analytics", href: "/analytics", icon: BarChart3, roles: ["ADMIN", "OWNER", "MANAGER", "ANALYST", "ANALYST_ASSISTANT", "MEMBER"] },
+  { label: "Ask LOOP AI", href: "/ask", icon: Sparkles, highlight: true, roles: ["ADMIN", "OWNER", "MANAGER", "ANALYST", "ANALYST_ASSISTANT", "MEMBER"] },
+  { label: "Trends & Spikes", href: "/trends", icon: TrendingUp, roles: ["ADMIN", "OWNER", "MANAGER", "ANALYST", "MEMBER"] },
+  { label: "VoC Reports", href: "/reports", icon: FileText, roles: ["ADMIN", "OWNER", "MANAGER", "ANALYST", "ANALYST_ASSISTANT", "REVIEWER", "VIEWER", "MEMBER"] },
 ];
 
-const workspaceItems = [
-  { label: "Team Members", href: "/settings/team", icon: Users },
-  { label: "Activity Audit", href: "/settings/activity", icon: Activity },
-  { label: "Workspace Settings", href: "/settings", icon: Settings },
+const allWorkspaceItems = [
+  { label: "Team Members", href: "/settings/team", icon: Users, roles: ["ADMIN", "OWNER", "MANAGER"] },
+  { label: "Activity Audit", href: "/settings/activity", icon: Activity, roles: ["ADMIN", "OWNER", "MANAGER"] },
+  { label: "Workspace Settings", href: "/settings", icon: Settings, roles: ["ADMIN", "OWNER", "MANAGER"] },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const { data: session } = useSession();
+
+  const userRole = (session?.user as { role?: string })?.role?.toUpperCase() || "ADMIN";
+
+  const navItems = allNavItems.filter((item) => item.roles.includes(userRole));
+  const workspaceItems = allWorkspaceItems.filter((item) => item.roles.includes(userRole));
 
   return (
     <aside
@@ -78,7 +84,7 @@ export default function Sidebar() {
               </div>
               <div className="truncate">
                 <p className="text-xs font-semibold text-white truncate">Acme Production</p>
-                <p className="text-[10px] text-slate-400 font-mono">ADMIN ROLE</p>
+                <p className="text-[10px] text-emerald-400 font-mono font-bold">{userRole} ROLE</p>
               </div>
             </div>
           </div>
@@ -127,7 +133,7 @@ export default function Sidebar() {
             );
           })}
 
-          {!collapsed && (
+          {!collapsed && workspaceItems.length > 0 && (
             <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-6 mb-2 font-mono">
               Workspace & Team
             </p>
@@ -163,13 +169,13 @@ export default function Sidebar() {
                 <User className="w-4 h-4" />
               </div>
               <div className="truncate">
-                <p className="text-xs font-semibold text-white truncate">Alex Mercer</p>
-                <p className="text-[10px] text-slate-400 truncate">alex@acme.com</p>
+                <p className="text-xs font-semibold text-white truncate">{session?.user?.name || "User"}</p>
+                <p className="text-[10px] text-slate-400 truncate">{session?.user?.email || "user@acme.com"}</p>
               </div>
             </div>
           ) : (
             <div className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-emerald-400 font-bold text-sm">
-              A
+              U
             </div>
           )}
 

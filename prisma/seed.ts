@@ -1,142 +1,174 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Role, FeedbackChannel, FeedbackStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-const sampleQuotes = [
-  { content: "The v2 onboarding flow is remarkably smooth and fast. Great job!", channel: "APP_STORE_REVIEW", sentimentScore: 0.9, sentimentLabel: "POSITIVE", status: "REVIEWED", customerName: "David Miller", customerEmail: "david@acme.com" },
-  { content: "Encountered 500 internal server error during SSO SAML configuration step.", channel: "SUPPORT_TICKET", sentimentScore: -0.8, sentimentLabel: "NEGATIVE", status: "NEW", customerName: "Elena Rostova", customerEmail: "elena@techcorp.io" },
-  { content: "Dashboard page load latency spiked to 4.2 seconds on mobile Safari.", channel: "SUPPORT_TICKET", sentimentScore: -0.6, sentimentLabel: "NEGATIVE", status: "NEW", customerName: "Marcus Vance", customerEmail: "marcus@logistics.net" },
-  { content: "Would love automated PDF export scheduling for Voice-of-Customer reports.", channel: "COMMUNITY_POST", sentimentScore: 0.4, sentimentLabel: "POSITIVE", status: "NEW", customerName: "Sarah Jenkins", customerEmail: "sarah@designhub.co" },
-  { content: "Ask LOOP RAG citations pinpoint exact quotes flawlessly. Huge time saver!", channel: "NPS_SURVEY", sentimentScore: 0.95, sentimentLabel: "POSITIVE", status: "ACTIONED", customerName: "Alex Rivera", customerEmail: "alex@fintech.org" },
-  { content: "Need role-based permissions to hide API keys from viewer team members.", channel: "SALES_CALL_NOTE", sentimentScore: -0.2, sentimentLabel: "NEUTRAL", status: "REVIEWED", customerName: "Robert Chen", customerEmail: "robert@enterprise.com" },
-  { content: "CSV bulk upload handled 10,000 rows without any browser memory issues.", channel: "APP_STORE_REVIEW", sentimentScore: 0.85, sentimentLabel: "POSITIVE", status: "ACTIONED", customerName: "Jessica Alba", customerEmail: "jessica@growth.io" },
-  { content: "Mobile drawer navbar feels extremely crisp and dark theme looks sleek.", channel: "COMMUNITY_POST", sentimentScore: 0.9, sentimentLabel: "POSITIVE", status: "REVIEWED", customerName: "Kevin Durant", customerEmail: "kevin@hoops.com" },
-  { content: "Webhooks for Intercom sync occasionally timeout during peak hours.", channel: "SUPPORT_TICKET", sentimentScore: -0.5, sentimentLabel: "NEGATIVE", status: "NEW", customerName: "Laura Croft", customerEmail: "laura@tomb.org" },
-  { content: "The sentiment analysis score accuracy on Spanish reviews is impressive.", channel: "NPS_SURVEY", sentimentScore: 0.8, sentimentLabel: "POSITIVE", status: "ACTIONED", customerName: "Carlos Santana", customerEmail: "carlos@latam.es" },
-];
-
 async function main() {
-  console.log("🌱 Seeding LOOP AI Production Database...");
+  console.log("🌱 Seeding enterprise demo data for Acme Production...");
 
-  // Clean existing data
-  await prisma.feedback.deleteMany({});
-  await prisma.feedbackTheme.deleteMany({});
-  await prisma.report.deleteMany({});
-  await prisma.workspaceMember.deleteMany({});
-  await prisma.workspace.deleteMany({});
-  await prisma.user.deleteMany({});
+  // 1. Hash passwords
+  const adminPassword = await bcrypt.hash("Admin@2026!Loop", 12);
+  const analystPassword = await bcrypt.hash("Analyst@2026!Loop", 12);
+  const viewerPassword = await bcrypt.hash("Viewer@2026!Loop", 12);
 
-  const passwordHash = await bcrypt.hash("Password123!", 10);
-
-  // 1. Create Admin & Users
-  const adminUser = await prisma.user.create({
-    data: {
-      name: "Admin User",
-      email: "admin@loop.ai",
-      password: passwordHash,
-      isVerified: true,
-      emailVerified: new Date(),
-    },
-  });
-
-  const analystUser = await prisma.user.create({
-    data: {
-      name: "Sarah Analyst",
-      email: "analyst@loop.ai",
-      password: passwordHash,
-      isVerified: true,
-      emailVerified: new Date(),
-    },
-  });
-
-  const viewerUser = await prisma.user.create({
-    data: {
-      name: "John Viewer",
-      email: "viewer@loop.ai",
-      password: passwordHash,
-      isVerified: true,
-      emailVerified: new Date(),
-    },
-  });
-
-
-  // 2. Create Primary Workspace
-  const workspace = await prisma.workspace.create({
-    data: {
-      name: "Acme Production Workspace",
+  // 2. Upsert Workspace
+  const workspace = await prisma.workspace.upsert({
+    where: { slug: "acme-prod" },
+    update: {},
+    create: {
+      name: "Acme Production",
       slug: "acme-prod",
-      description: "Primary enterprise feedback intelligence workspace.",
-      industry: "SaaS / Software",
-      teamSize: "51-200 Employees",
-      apiKey: "loop_live_sk_9921481948194819",
+      industry: "Enterprise SaaS & B2B Software",
+      description: "Production Workspace for LOOP Customer Intelligence",
+      apiKey: "acme_prod_live_key_99882211",
     },
   });
 
-  // 3. Create Workspace Memberships
-  await prisma.workspaceMember.createMany({
-    data: [
-      { workspaceId: workspace.id, userId: adminUser.id, role: "ADMIN" },
-      { workspaceId: workspace.id, userId: analystUser.id, role: "ANALYST" },
-      { workspaceId: workspace.id, userId: viewerUser.id, role: "VIEWER" },
-    ],
-  });
-
-  // 4. Create Key Themes
-  const theme1 = await prisma.feedbackTheme.create({
-    data: {
-      workspaceId: workspace.id,
-      title: "Onboarding Latency",
-      description: "Latency and setup issues reported during v2 release.",
-      color: "rose",
-      growthRate: 45.0,
-      isSpike: true,
+  // 3. Upsert Admin User
+  const admin = await prisma.user.upsert({
+    where: { email: "admin@acme.demo" },
+    update: { password: adminPassword },
+    create: {
+      email: "admin@acme.demo",
+      name: "Acme Admin User",
+      password: adminPassword,
+      isVerified: true,
     },
   });
 
-  const theme2 = await prisma.feedbackTheme.create({
-    data: {
-      workspaceId: workspace.id,
-      title: "Dashboard Speed & UI",
-      description: "Positive praise for responsive dark mode UI and navigation.",
-      color: "emerald",
-      growthRate: 92.0,
-      isSpike: false,
+  // 4. Upsert Analyst User
+  const analyst = await prisma.user.upsert({
+    where: { email: "analyst@acme.demo" },
+    update: { password: analystPassword },
+    create: {
+      email: "analyst@acme.demo",
+      name: "Acme Lead Analyst",
+      password: analystPassword,
+      isVerified: true,
     },
   });
 
-  const theme3 = await prisma.feedbackTheme.create({
-    data: {
-      workspaceId: workspace.id,
-      title: "SSO & SAML Integration",
-      description: "Enterprise feature requests for SAML Okta integration.",
-      color: "amber",
-      growthRate: 15.0,
-      isSpike: false,
+  // 5. Upsert Viewer User
+  const viewer = await prisma.user.upsert({
+    where: { email: "viewer@acme.demo" },
+    update: { password: viewerPassword },
+    create: {
+      email: "viewer@acme.demo",
+      name: "Acme Executive Viewer",
+      password: viewerPassword,
+      isVerified: true,
     },
   });
 
-  // 5. Seed 100 Sample Feedback Records
+  // 6. Workspace Memberships
+  await prisma.workspaceMember.upsert({
+    where: { workspaceId_userId: { workspaceId: workspace.id, userId: admin.id } },
+    update: { role: Role.ADMIN },
+    create: { workspaceId: workspace.id, userId: admin.id, role: Role.ADMIN },
+  });
+
+  await prisma.workspaceMember.upsert({
+    where: { workspaceId_userId: { workspaceId: workspace.id, userId: analyst.id } },
+    update: { role: Role.ANALYST },
+    create: { workspaceId: workspace.id, userId: analyst.id, role: Role.ANALYST },
+  });
+
+  await prisma.workspaceMember.upsert({
+    where: { workspaceId_userId: { workspaceId: workspace.id, userId: viewer.id } },
+    update: { role: Role.VIEWER },
+    create: { workspaceId: workspace.id, userId: viewer.id, role: Role.VIEWER },
+  });
+
+  // 7. Feedback Themes
+  const themes = [
+    { title: "Dashboard Latency", description: "Queries and metric loading times during peak hours", color: "rose" },
+    { title: "Onboarding Guidance", description: "Team invite workflow and initial workspace setup", color: "amber" },
+    { title: "CSV Bulk Upload", description: "Ingestion of large datasets and column mapping", color: "emerald" },
+    { title: "API Webhook Stability", description: "Real-time event payload delivery and rate limits", color: "blue" },
+    { title: "Mobile App UX", description: "Navigation and mobile push notifications", color: "purple" },
+  ];
+
+  const createdThemes = [];
+  for (const t of themes) {
+    const theme = await prisma.feedbackTheme.create({
+      data: {
+        workspaceId: workspace.id,
+        title: t.title,
+        description: t.description,
+        color: t.color,
+        growthRate: Math.random() * 25,
+        isSpike: t.title === "Dashboard Latency",
+      },
+    });
+    createdThemes.push(theme);
+  }
+
+  // 8. Seed 500 Realistic Feedback Records
+  const channels: FeedbackChannel[] = [
+    FeedbackChannel.SUPPORT_TICKET,
+    FeedbackChannel.APP_STORE_REVIEW,
+    FeedbackChannel.NPS_SURVEY,
+    FeedbackChannel.SALES_CALL_NOTE,
+    FeedbackChannel.COMMUNITY_POST,
+  ];
+
+  const statuses: FeedbackStatus[] = [
+    FeedbackStatus.NEW,
+    FeedbackStatus.REVIEWED,
+    FeedbackStatus.ACTIONED,
+  ];
+
+  const companies = ["Stripe", "Linear", "Vercel", "Datadog", "Notion", "Figma", "Snowflake", "Twilio", "Plaid"];
+  const names = ["Sarah Jenkins", "David Miller", "Elena Rostova", "Marcus Chen", "Chloe Bennett", "Liam O'Connor"];
+
+  console.log("⏳ Generating 500 realistic feedback records...");
   const feedbackData = [];
-  const channels = ["SUPPORT_TICKET", "APP_STORE_REVIEW", "NPS_SURVEY", "SALES_CALL_NOTE", "COMMUNITY_POST"] as const;
-  const statuses = ["NEW", "REVIEWED", "ACTIONED"] as const;
+  for (let i = 1; i <= 500; i++) {
+    const isPositive = i % 3 === 0;
+    const isNegative = i % 3 === 1;
+    const channel = channels[i % channels.length];
+    const status = statuses[i % statuses.length];
+    const company = companies[i % companies.length];
+    const name = names[i % names.length];
+    const theme = createdThemes[i % createdThemes.length];
 
-  for (let i = 0; i < 100; i++) {
-    const template = sampleQuotes[i % sampleQuotes.length];
-    const theme = i % 3 === 0 ? theme1 : i % 3 === 1 ? theme2 : theme3;
+    let content = "";
+    let sentimentScore = 0.0;
+    let sentimentLabel = "NEUTRAL";
+
+    if (isPositive) {
+      content = `The v2 analytics redesign for ${company} is outstanding! Report generation velocity improved significantly.`;
+      sentimentScore = 0.85 + Math.random() * 0.12;
+      sentimentLabel = "POSITIVE";
+    } else if (isNegative) {
+      content = `Experiencing intermittent timeout errors during CSV bulk ingestion on ${theme.title}. Needs immediate engineering triage.`;
+      sentimentScore = -0.75 - Math.random() * 0.2;
+      sentimentLabel = "NEGATIVE";
+    } else {
+      content = `Requested additional REST API webhook endpoints for automated integration with ${company} internal tools.`;
+      sentimentScore = 0.1;
+      sentimentLabel = "NEUTRAL";
+    }
 
     feedbackData.push({
       workspaceId: workspace.id,
-      authorId: i % 2 === 0 ? adminUser.id : analystUser.id,
-      content: `${template.content} (Item #${i + 1})`,
-      channel: channels[i % channels.length],
-      sentimentScore: Number((Math.sin(i) * 0.9).toFixed(2)),
-      sentimentLabel: i % 2 === 0 ? "POSITIVE" : i % 5 === 0 ? "NEGATIVE" : "NEUTRAL",
-      status: statuses[i % statuses.length],
-      customerName: template.customerName,
-      customerEmail: template.customerEmail,
+      authorId: admin.id,
+      content,
+      channel,
+      company,
+      rating: isPositive ? 5 : isNegative ? 2 : 4,
+      category: theme.title,
+      priority: isNegative ? "HIGH" : "MEDIUM",
+      product: "Core Platform",
+      source: "Web Portal",
+      tags: [theme.title, company],
+      sentimentScore,
+      sentimentLabel,
+      status,
+      customerName: name,
+      customerEmail: `${name.toLowerCase().replace(" ", ".")}@${company.toLowerCase()}.com`,
       themeId: theme.id,
-      createdAt: new Date(Date.now() - i * 3600 * 1000 * 4),
+      createdAt: new Date(Date.now() - Math.floor(Math.random() * 30 * 24 * 3600 * 1000)),
     });
   }
 
@@ -144,27 +176,35 @@ async function main() {
     data: feedbackData,
   });
 
-  // 6. Create Initial VoC Executive Report
+  // 9. Reports Seed
   await prisma.report.create({
     data: {
       workspaceId: workspace.id,
-      authorId: adminUser.id,
-      title: "Weekly Voice-of-Customer Executive Digest",
-      summary: "Customer sentiment improved +6.4% this week. Onboarding friction was identified as the top spiking issue with 42 mentions.",
-      totalItems: 100,
-      avgSentiment: 0.84,
+      authorId: admin.id,
+      title: "Q3 2026 Executive Voice-of-Customer Digest",
+      summary: "Comprehensive feedback analysis across 500+ items indicates high customer satisfaction on new UI dashboards, with latency spike alerts identified in webhook ingestion APIs.",
+      totalItems: 500,
+      avgSentiment: 0.68,
     },
   });
 
-  console.log("✅ Seed completed successfully!");
-  console.log(`👤 Admin Account: admin@loop.ai / Password123!`);
-  console.log(`🏢 Workspace: Acme Production Workspace (ID: ${workspace.id})`);
-  console.log(`📊 Feedback Items Seeded: 100`);
+  // 10. Audit Log Seed
+  await prisma.auditLog.create({
+    data: {
+      workspaceId: workspace.id,
+      userId: admin.id,
+      action: "WORKSPACE_SEEDED",
+      entityType: "Workspace",
+      details: "Seeded 500 feedback items and 3 demo accounts (Admin, Analyst, Viewer).",
+    },
+  });
+
+  console.log("✅ Enterprise demo seed completed successfully!");
 }
 
 main()
   .catch((e) => {
-    console.error("❌ Seed Error:", e);
+    console.error("Seed failed:", e);
     process.exit(1);
   })
   .finally(async () => {

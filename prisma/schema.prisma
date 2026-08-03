@@ -23,6 +23,7 @@ enum FeedbackStatus {
   NEW
   REVIEWED
   ACTIONED
+  ARCHIVED
 }
 
 enum FeedbackChannel {
@@ -129,12 +130,21 @@ model Feedback {
   authorId       String?
   content        String          @db.Text
   channel        FeedbackChannel @default(SUPPORT_TICKET)
+  company        String?
+  rating         Int?            @default(5)
+  category       String?         @default("General")
+  priority       String?         @default("MEDIUM")
+  product        String?         @default("Core Platform")
+  source         String?         @default("Web Portal")
+  tags           String[]        @default([])
+  rationale      String?         @db.Text
   sentimentScore Float           @default(0.0)
   sentimentLabel String          @default("NEUTRAL")
   status         FeedbackStatus  @default(NEW)
   customerName   String?
   customerEmail  String?
   themeId        String?
+  assignedToId   String?
   deletedAt      DateTime?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
