@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
 import { IS_DEMO_MODE } from "@/lib/config";
+import type { Feedback } from "@prisma/client";
 
 const askSchema = z.object({
   prompt: z.string().min(3, "Prompt must be at least 3 characters"),
@@ -51,8 +52,8 @@ export async function POST(req: Request) {
     }
 
     // Production RAG Retrieval Engine
-    const searchTerms = prompt.toLowerCase().split(" ").filter((w) => w.length > 3);
-    const feedbackItems = await db.feedback.findMany({
+    const searchTerms: string[] = prompt.toLowerCase().split(" ").filter((w: string) => w.length > 3);
+    const feedbackItems: Feedback[] = await db.feedback.findMany({
       where: {
         workspaceId,
         deletedAt: null,
@@ -61,9 +62,9 @@ export async function POST(req: Request) {
       orderBy: { createdAt: "desc" },
     });
 
-    const relevant = feedbackItems.filter((item) => {
+    const relevant: Feedback[] = feedbackItems.filter((item: Feedback) => {
       const lower = item.content.toLowerCase();
-      return searchTerms.some((term) => lower.includes(term));
+      return searchTerms.some((term: string) => lower.includes(term));
     });
 
     if (relevant.length === 0 && feedbackItems.length === 0) {
@@ -74,9 +75,9 @@ export async function POST(req: Request) {
       });
     }
 
-    const matchedList = relevant.length > 0 ? relevant.slice(0, 5) : feedbackItems.slice(0, 5);
+    const matchedList: Feedback[] = relevant.length > 0 ? relevant.slice(0, 5) : feedbackItems.slice(0, 5);
 
-    const citations = matchedList.map((item) => ({
+    const citations = matchedList.map((item: Feedback) => ({
       id: item.id,
       quote: item.content,
       customer: item.customerName || "Customer",
