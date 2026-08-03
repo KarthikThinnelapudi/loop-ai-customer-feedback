@@ -4,11 +4,27 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
 import { IS_DEMO_MODE } from "@/lib/config";
-import type { Feedback } from "@prisma/client";
 
 const askSchema = z.object({
   prompt: z.string().min(3, "Prompt must be at least 3 characters"),
 });
+
+interface FeedbackRecord {
+  id: string;
+  workspaceId: string;
+  authorId?: string | null;
+  content: string;
+  channel: string;
+  sentimentScore: number;
+  sentimentLabel: string;
+  status: string;
+  customerName?: string | null;
+  customerEmail?: string | null;
+  themeId?: string | null;
+  deletedAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 export async function POST(req: Request) {
   try {
@@ -53,16 +69,16 @@ export async function POST(req: Request) {
 
     // Production RAG Retrieval Engine
     const searchTerms: string[] = prompt.toLowerCase().split(" ").filter((w: string) => w.length > 3);
-    const feedbackItems: Feedback[] = await db.feedback.findMany({
+    const feedbackItems: FeedbackRecord[] = (await db.feedback.findMany({
       where: {
         workspaceId,
         deletedAt: null,
       },
       take: 50,
       orderBy: { createdAt: "desc" },
-    });
+    })) as FeedbackRecord[];
 
-    const relevant: Feedback[] = feedbackItems.filter((item: Feedback) => {
+    const relevant: FeedbackRecord[] = feedbackItems.filter((item: FeedbackRecord) => {
       const lower = item.content.toLowerCase();
       return searchTerms.some((term: string) => lower.includes(term));
     });
@@ -75,9 +91,9 @@ export async function POST(req: Request) {
       });
     }
 
-    const matchedList: Feedback[] = relevant.length > 0 ? relevant.slice(0, 5) : feedbackItems.slice(0, 5);
+    const matchedList: FeedbackRecord[] = relevant.length > 0 ? relevant.slice(0, 5) : feedbackItems.slice(0, 5);
 
-    const citations = matchedList.map((item: Feedback) => ({
+    const citations = matchedList.map((item: FeedbackRecord) => ({
       id: item.id,
       quote: item.content,
       customer: item.customerName || "Customer",
