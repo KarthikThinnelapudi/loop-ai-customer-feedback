@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { IS_DEMO_MODE } from "@/lib/config";
+import { sendEmail, getVerificationEmailTemplate } from "@/lib/email";
 
 const registerSchema = z.object({
   workspaceName: z.string().min(2, "Workspace name must be at least 2 characters"),
@@ -16,6 +16,7 @@ const registerSchema = z.object({
     .min(8, "Password must be at least 8 characters")
     .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
     .regex(/[0-9]/, "Password must contain at least one number"),
+  inviteToken: z.string().optional(),
 });
 
 export async function POST(req: Request) {
@@ -23,8 +24,11 @@ export async function POST(req: Request) {
     const body = await req.json();
     const validatedData = registerSchema.parse(body);
 
+    // Normalize email (trim + lowercase)
+    const normalizedEmail = validatedData.email.trim().toLowerCase();
+
     const existingUser = await db.user.findUnique({
-      where: { email: validatedData.email },
+      where: { email: normalizedEmail },
     });
 
     if (existingUser) {
@@ -43,8 +47,9 @@ export async function POST(req: Request) {
       ? `${slugCandidate}-${Math.floor(1000 + Math.random() * 9000)}`
       : slugCandidate;
 
-    const hashedPassword = await bcrypt.hash(validatedData.password, 10);
-    const requiresVerification = !IS_DEMO_MODE;
+    // Hash password with 12 bcrypt salt rounds
+    const hashedPassword = await bcrypt.hash(validatedData.password, 12);
+    const tokenStr = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
     // Atomic transaction: Workspace -> User -> WorkspaceMember -> VerificationToken
     const result = await db.$transaction(async (tx) => {
@@ -62,10 +67,10 @@ export async function POST(req: Request) {
       const user = await tx.user.create({
         data: {
           name: validatedData.name,
-          email: validatedData.email,
+          email: normalizedEmail,
           password: hashedPassword,
-          isVerified: !requiresVerification,
-          emailVerified: requiresVerification ? null : new Date(),
+          isVerified: true, // Allow immediate login post-registration
+          emailVerified: new Date(),
         },
       });
 
@@ -77,26 +82,13 @@ export async function POST(req: Request) {
         },
       });
 
-      // Default Themes/Categories Creation
-      await tx.feedbackTheme.createMany({
-        data: [
-          { workspaceId: workspace.id, title: "Onboarding Experience", color: "rose", growthRate: 12.0 },
-          { workspaceId: workspace.id, title: "Dashboard & UI Speed", color: "emerald", growthRate: 45.0 },
-          { workspaceId: workspace.id, title: "SSO & SAML Security", color: "amber", growthRate: 25.0 },
-        ],
+      await tx.verificationToken.create({
+        data: {
+          identifier: normalizedEmail,
+          token: tokenStr,
+          expires: new Date(Date.now() + 24 * 3600 * 1000), // 24 Hours
+        },
       });
-
-      // Create Verification Token if in Production Mode
-      if (requiresVerification) {
-        const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-        await tx.verificationToken.create({
-          data: {
-            identifier: validatedData.email,
-            token,
-            expires: new Date(Date.now() + 24 * 3600 * 1000), // 24 Hours
-          },
-        });
-      }
 
       await tx.auditLog.create({
         data: {
@@ -112,14 +104,21 @@ export async function POST(req: Request) {
       return { workspace, user };
     });
 
+    // Send Welcome & Verification Email
+    const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const verifyUrl = `${baseUrl}/verify-email?email=${encodeURIComponent(normalizedEmail)}&token=${tokenStr}`;
+    await sendEmail({
+      to: normalizedEmail,
+      subject: "Welcome to LOOP AI - Account Activated",
+      html: getVerificationEmailTemplate(validatedData.name, verifyUrl),
+    });
+
     return NextResponse.json(
       {
-        message: requiresVerification
-          ? "Account registered! A verification link has been sent to your email. Please verify before signing in."
-          : "Workspace and Admin account created successfully.",
+        message: "Account registered successfully! You may now log in.",
         workspaceId: result.workspace.id,
         userId: result.user.id,
-        requiresVerification,
+        requiresVerification: false,
       },
       { status: 201 }
     );

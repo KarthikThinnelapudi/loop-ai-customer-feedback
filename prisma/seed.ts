@@ -35,6 +35,8 @@ async function main() {
       name: "Admin User",
       email: "admin@loop.ai",
       password: passwordHash,
+      isVerified: true,
+      emailVerified: new Date(),
     },
   });
 
@@ -43,6 +45,8 @@ async function main() {
       name: "Sarah Analyst",
       email: "analyst@loop.ai",
       password: passwordHash,
+      isVerified: true,
+      emailVerified: new Date(),
     },
   });
 
@@ -51,8 +55,11 @@ async function main() {
       name: "John Viewer",
       email: "viewer@loop.ai",
       password: passwordHash,
+      isVerified: true,
+      emailVerified: new Date(),
     },
   });
+
 
   // 2. Create Primary Workspace
   const workspace = await prisma.workspace.create({

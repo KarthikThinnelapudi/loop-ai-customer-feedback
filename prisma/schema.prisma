@@ -38,6 +38,9 @@ model User {
   image         String?
   emailVerified DateTime?
   isVerified    Boolean           @default(false)
+  mfaEnabled    Boolean           @default(false)
+  mfaSecret     String?
+  mfaBackupCodes String[]         @default([])
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
@@ -66,6 +69,7 @@ model Workspace {
   themes      FeedbackTheme[]
   reports     Report[]
   auditLogs   AuditLog[]
+  invitations InvitationToken[]
 }
 
 model WorkspaceMember {
@@ -82,6 +86,21 @@ model WorkspaceMember {
   @@unique([workspaceId, userId])
   @@index([workspaceId])
   @@index([userId])
+}
+
+model InvitationToken {
+  id          String    @id @default(uuid())
+  email       String
+  workspaceId String
+  role        Role      @default(MEMBER)
+  token       String    @unique
+  expires     DateTime
+  createdAt   DateTime  @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([email])
 }
 
 model FeedbackTheme {

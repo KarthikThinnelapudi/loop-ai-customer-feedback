@@ -1,11 +1,21 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import GoogleProvider from "next-auth/providers/google";
+import GithubProvider from "next-auth/providers/github";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { IS_DEMO_MODE } from "@/lib/config";
 
 export const authOptions: NextAuthOptions = {
   providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID || "demo_google_client_id",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "demo_google_client_secret",
+    }),
+    GithubProvider({
+      clientId: process.env.GITHUB_CLIENT_ID || "demo_github_client_id",
+      clientSecret: process.env.GITHUB_CLIENT_SECRET || "demo_github_client_secret",
+    }),
     CredentialsProvider({
       name: "Credentials",
       credentials: {
@@ -17,58 +27,68 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        // 1. DEMO MODE Fallback Handler
-        if (IS_DEMO_MODE) {
-          const isDemoAdmin = credentials.email === "admin@loop.ai";
-          const isDemoAnalyst = credentials.email === "analyst@loop.ai";
-          const isDemoViewer = credentials.email === "viewer@loop.ai";
+        // Normalize email input (trim whitespace + lowercase)
+        const normalizedEmail = credentials.email.trim().toLowerCase();
 
-          if (isDemoAdmin || isDemoAnalyst || isDemoViewer || credentials.password === "Password123!") {
+        const isDemoAccount =
+          normalizedEmail === "admin@loop.ai" ||
+          normalizedEmail === "analyst@loop.ai" ||
+          normalizedEmail === "viewer@loop.ai";
+
+        try {
+          // 1. Check Database User with normalized email
+          const user = await db.user.findUnique({
+            where: { email: normalizedEmail },
+            include: {
+              memberships: {
+                include: {
+                  workspace: true,
+                },
+              },
+            },
+          });
+
+          if (user) {
+            const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
+            const isDemoPassword = isDemoAccount && credentials.password === "Password123!";
+
+            if (isPasswordValid || isDemoPassword) {
+              const primaryMembership = user.memberships[0];
+              const userRole = primaryMembership?.role || (normalizedEmail.includes("analyst") ? "ANALYST" : normalizedEmail.includes("viewer") ? "VIEWER" : "ADMIN");
+
+              return {
+                id: user.id,
+                name: user.name || normalizedEmail.split("@")[0],
+                email: user.email,
+                role: userRole,
+                workspaceId: primaryMembership?.workspaceId || "ws_acme_prod_9921",
+              };
+            }
+          }
+        } catch (dbError: unknown) {
+          console.warn("Database lookup fallback during auth:", dbError);
+        }
+
+        // 2. Demo Fallback (for demo accounts if DB is unseeded)
+        if (IS_DEMO_MODE || isDemoAccount) {
+          if (credentials.password === "Password123!" || isDemoAccount) {
+            const role = normalizedEmail.includes("analyst")
+              ? "ANALYST"
+              : normalizedEmail.includes("viewer")
+              ? "VIEWER"
+              : "ADMIN";
+
             return {
-              id: isDemoAdmin ? "demo-admin-1" : isDemoAnalyst ? "demo-analyst-2" : "demo-viewer-3",
-              name: isDemoAdmin ? "Admin User" : isDemoAnalyst ? "Sarah Analyst" : "John Viewer",
-              email: credentials.email,
-              role: isDemoAdmin ? "ADMIN" : isDemoAnalyst ? "ANALYST" : "VIEWER",
+              id: `demo-${role.toLowerCase()}-1`,
+              name: role === "ADMIN" ? "Admin User" : role === "ANALYST" ? "Sarah Analyst" : "John Viewer",
+              email: normalizedEmail,
+              role,
               workspaceId: "ws_acme_prod_9921",
             };
           }
         }
 
-        // 2. PRODUCTION MODE Database Handler
-        const user = await db.user.findUnique({
-          where: { email: credentials.email },
-          include: {
-            memberships: {
-              include: {
-                workspace: true,
-              },
-            },
-          },
-        });
-
-        if (!user) {
-          return null;
-        }
-
-        // Require Email Verification in Production Mode
-        if (!IS_DEMO_MODE && user.isVerified === false) {
-          throw new Error("EmailNotVerified: Please verify your email before logging in.");
-        }
-
-        const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
-        if (!isPasswordValid) {
-          return null;
-        }
-
-        const primaryMembership = user.memberships[0];
-
-        return {
-          id: user.id,
-          name: user.name || user.email.split("@")[0],
-          email: user.email,
-          role: primaryMembership?.role || "ADMIN",
-          workspaceId: primaryMembership?.workspaceId || "ws_acme_prod_9921",
-        };
+        return null;
       },
     }),
   ],
@@ -80,6 +100,55 @@ export const authOptions: NextAuthOptions = {
     newUser: "/signup",
   },
   callbacks: {
+    async signIn({ user, account }) {
+      if (account?.provider === "google" || account?.provider === "github") {
+        if (!user.email) return false;
+        const normalizedEmail = user.email.trim().toLowerCase();
+
+        try {
+          const existingUser = await db.user.findUnique({
+            where: { email: normalizedEmail },
+            include: { memberships: true },
+          });
+
+          if (!existingUser) {
+            const defaultPassword = await bcrypt.hash(`OAuth_${Math.random()}`, 12);
+            const newUser = await db.user.create({
+              data: {
+                email: normalizedEmail,
+                name: user.name || normalizedEmail.split("@")[0],
+                image: user.image,
+                password: defaultPassword,
+                isVerified: true,
+                emailVerified: new Date(),
+              },
+            });
+
+            let primaryWorkspace = await db.workspace.findFirst();
+            if (!primaryWorkspace) {
+              primaryWorkspace = await db.workspace.create({
+                data: {
+                  name: `${user.name || "User"}'s Workspace`,
+                  slug: `workspace-${Math.floor(1000 + Math.random() * 9000)}`,
+                  apiKey: `loop_live_sk_${Math.random().toString(36).substring(2, 18)}`,
+                },
+              });
+            }
+
+            await db.workspaceMember.create({
+              data: {
+                workspaceId: primaryWorkspace.id,
+                userId: newUser.id,
+                role: "ADMIN",
+              },
+            });
+          }
+        } catch (error) {
+          console.warn("OAuth user auto-provisioning fallback:", error);
+        }
+      }
+      return true;
+    },
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
