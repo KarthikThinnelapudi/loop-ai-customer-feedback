@@ -9,10 +9,12 @@ datasource db {
 }
 
 enum Role {
+  OWNER
   ADMIN
   MANAGER
   MEMBER
   ANALYST
+  REVIEWER
   VIEWER
 }
 

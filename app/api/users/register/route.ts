@@ -82,6 +82,11 @@ export async function POST(req: Request) {
         },
       });
 
+      // Clear any previous verification token for this email identifier
+      await tx.verificationToken.deleteMany({
+        where: { identifier: normalizedEmail },
+      });
+
       await tx.verificationToken.create({
         data: {
           identifier: normalizedEmail,
@@ -105,13 +110,17 @@ export async function POST(req: Request) {
     });
 
     // Send Welcome & Verification Email
-    const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
-    const verifyUrl = `${baseUrl}/verify-email?email=${encodeURIComponent(normalizedEmail)}&token=${tokenStr}`;
-    await sendEmail({
-      to: normalizedEmail,
-      subject: "Welcome to LOOP AI - Account Activated",
-      html: getVerificationEmailTemplate(validatedData.name, verifyUrl),
-    });
+    try {
+      const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+      const verifyUrl = `${baseUrl}/verify-email?email=${encodeURIComponent(normalizedEmail)}&token=${tokenStr}`;
+      await sendEmail({
+        to: normalizedEmail,
+        subject: "Welcome to LOOP AI - Account Activated",
+        html: getVerificationEmailTemplate(validatedData.name, verifyUrl),
+      });
+    } catch (emailErr) {
+      console.warn("Non-fatal welcome email dispatch warning:", emailErr);
+    }
 
     return NextResponse.json(
       {
@@ -129,9 +138,9 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    console.error("Registration Error:", error);
+    console.error("Registration Error Stack Trace:", error);
     return NextResponse.json(
-      { message: "Internal server error during registration." },
+      { message: error instanceof Error ? error.message : "Internal server error during registration." },
       { status: 500 }
     );
   }

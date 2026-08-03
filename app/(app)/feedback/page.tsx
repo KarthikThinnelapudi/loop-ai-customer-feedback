@@ -14,7 +14,10 @@ import {
   Eye,
   RefreshCw,
   Sparkles,
+  Upload,
 } from "lucide-react";
+import CSVUploadModal from "@/components/feedback/CSVUploadModal";
+
 
 interface FeedbackItem {
   id: string;
@@ -66,8 +69,9 @@ export default function FeedbackInboxPage() {
   const [selectedItem, setSelectedItem] = useState<FeedbackItem | null>(null);
   const [data, setData] = useState<FeedbackItem[]>(mockFeedbackData);
   const [reclassifyingId, setReclassifyingId] = useState<string | null>(null);
+  const [isCSVModalOpen, setIsCSVModalOpen] = useState(false);
 
-  useEffect(() => {
+  const fetchFeedback = () => {
     fetch("/api/feedback")
       .then((res) => (res.ok ? res.json() : null))
       .then((apiData) => {
@@ -101,7 +105,12 @@ export default function FeedbackInboxPage() {
       .catch(() => {
         // Fallback to initial mock data if offline
       });
+  };
+
+  useEffect(() => {
+    fetchFeedback();
   }, []);
+
 
 
   const filteredData = data.filter((item) => {
@@ -150,10 +159,19 @@ export default function FeedbackInboxPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-xs font-mono text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
+          <button
+            onClick={() => setIsCSVModalOpen(true)}
+            className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs transition flex items-center gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Import CSV</span>
+          </button>
+
+          <span className="text-xs font-mono text-slate-400 bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl">
             Total Items: {filteredData.length}
           </span>
         </div>
+
       </div>
 
       {/* Filter Controls Bar */}
@@ -374,6 +392,14 @@ export default function FeedbackInboxPage() {
           </div>
         </Modal>
       )}
+
+      {/* CSV Upload Modal */}
+      <CSVUploadModal
+        isOpen={isCSVModalOpen}
+        onClose={() => setIsCSVModalOpen(false)}
+        onSuccess={() => fetchFeedback()}
+      />
     </DashboardLayout>
   );
 }
+
