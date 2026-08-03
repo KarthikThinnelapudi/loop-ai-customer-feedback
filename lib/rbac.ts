@@ -1,4 +1,12 @@
-export type Role = "OWNER" | "ADMIN" | "MANAGER" | "MEMBER" | "ANALYST" | "REVIEWER" | "VIEWER";
+export type Role =
+  | "OWNER"
+  | "ADMIN"
+  | "MANAGER"
+  | "MEMBER"
+  | "ANALYST"
+  | "ANALYST_ASSISTANT"
+  | "REVIEWER"
+  | "VIEWER";
 
 export type Permission =
   | "workspace:delete"
@@ -54,6 +62,11 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "feedback:import",
     "ai:analyze",
     "reports:generate",
+    "read:all",
+  ],
+  ANALYST_ASSISTANT: [
+    "feedback:import",
+    "ai:analyze",
     "read:all",
   ],
   MEMBER: [
