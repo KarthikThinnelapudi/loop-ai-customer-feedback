@@ -202,6 +202,15 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }: CSVUpload
 
         {/* Drag and Drop Zone */}
         <div
+          role="button"
+          tabIndex={0}
+          aria-label="CSV file dropzone"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
           onDragOver={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -214,7 +223,7 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }: CSVUpload
           }}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`p-8 rounded-2xl border-2 border-dashed text-center cursor-pointer transition flex flex-col items-center justify-center ${
+          className={`p-8 rounded-2xl border-2 border-dashed text-center cursor-pointer transition flex flex-col items-center justify-center focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
             isDragOver ? "border-emerald-400 bg-emerald-500/10" : "border-slate-800 bg-slate-950 hover:border-slate-700"
           }`}
         >
@@ -226,6 +235,7 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }: CSVUpload
           <button
             type="button"
             onClick={(e) => {
+              e.preventDefault();
               e.stopPropagation();
               fileInputRef.current?.click();
             }}
@@ -238,6 +248,7 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }: CSVUpload
             Supported format: <code className="font-mono text-emerald-400">.csv</code> (Max size: 20 MB)
           </p>
         </div>
+
 
         {/* Selected File Details & Preview Header */}
         {file && parsedRows.length > 0 && (

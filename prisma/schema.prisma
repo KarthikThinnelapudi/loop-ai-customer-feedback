@@ -72,6 +72,7 @@ model Workspace {
   feedback    Feedback[]
   themes      FeedbackTheme[]
   reports     Report[]
+  shareLinks  ShareLink[]
   auditLogs   AuditLog[]
   invitations InvitationToken[]
 }
@@ -160,21 +161,41 @@ model Feedback {
 }
 
 model Report {
-  id           String    @id @default(uuid())
+  id           String      @id @default(uuid())
   workspaceId  String
   authorId     String?
   title        String
-  summary      String    @db.Text
-  totalItems   Int       @default(0)
-  avgSentiment Float     @default(0.0)
+  summary      String      @db.Text
+  totalItems   Int         @default(0)
+  avgSentiment Float       @default(0.0)
   pdfUrl       String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  author       User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  workspace    Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  author       User?       @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  shareLinks   ShareLink[]
 
   @@index([workspaceId])
+}
+
+model ShareLink {
+  id          String    @id @default(uuid())
+  token       String    @unique @default(uuid())
+  reportId    String
+  workspaceId String
+  createdBy   String
+  expiresAt   DateTime?
+  revoked     Boolean   @default(false)
+  accessCount Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  report      Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([token])
 }
 
 model AuditLog {

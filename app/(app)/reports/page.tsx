@@ -14,6 +14,8 @@ import {
   Trash2,
   Loader2,
   ShieldAlert,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import { hasPermission } from "@/lib/rbac";
 
@@ -34,13 +36,21 @@ export default function ReportsPage() {
 
   const canGenerate = hasPermission(userRole, "reports:generate");
   const canDeleteReport = hasPermission(userRole, "users:manage"); // Admin/Owner only
+  const canShareReport = hasPermission(userRole, "reports:share");
 
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Share Modal State
+  const [expiresInDays, setExpiresInDays] = useState(7);
+  const [generatedShareUrl, setGeneratedShareUrl] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const fetchReports = () => {
     fetch("/api/reports")
@@ -80,9 +90,51 @@ export default function ReportsPage() {
       setShowGenerateModal(false);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error generating report.");
-    } finally {
+    } fontally: {
       setGenerating(false);
     }
+  };
+
+  const handleCreateShareLink = async () => {
+    if (!selectedReport || !canShareReport) return;
+    setSharing(true);
+    setGeneratedShareUrl(null);
+    try {
+      const res = await fetch("/api/reports/share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reportId: selectedReport.id,
+          expiresInDays,
+        }),
+      });
+
+      const result = await res.json();
+      if (!res.ok) {
+        throw new Error(result.message || "Failed to create share link.");
+      }
+
+      setGeneratedShareUrl(result.shareUrl);
+
+      // Web Share API fallback if supported
+      if (navigator.share) {
+        navigator.share({
+          title: selectedReport.title,
+          url: result.shareUrl,
+        }).catch(() => {});
+      }
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to generate link.");
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const handleCopyShareLink = () => {
+    if (!generatedShareUrl) return;
+    navigator.clipboard.writeText(generatedShareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleDeleteReport = async (id: string) => {
@@ -215,13 +267,19 @@ export default function ReportsPage() {
                       <Printer className="w-4 h-4" />
                       <span>Print PDF</span>
                     </button>
-                    <button
-                      onClick={() => alert("Report copy link saved to clipboard!")}
-                      className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-semibold transition flex items-center gap-1.5"
-                    >
-                      <Share2 className="w-4 h-4" />
-                      <span>Share Digest</span>
-                    </button>
+
+                    {canShareReport && (
+                      <button
+                        onClick={() => {
+                          setGeneratedShareUrl(null);
+                          setShowShareModal(true);
+                        }}
+                        className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-semibold transition flex items-center gap-1.5"
+                      >
+                        <Share2 className="w-4 h-4" />
+                        <span>Share Digest</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -263,6 +321,81 @@ export default function ReportsPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Share Digest Modal */}
+      {showShareModal && selectedReport && (
+        <Modal
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          title="Share Executive VoC Digest"
+        >
+          <div className="space-y-4 text-xs text-slate-300">
+            <p>
+              Generate a cryptographically secure token link for <strong>{selectedReport.title}</strong>. Internal database IDs and administrative settings will be hidden.
+            </p>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                Link Expiration
+              </label>
+              <select
+                value={expiresInDays}
+                onChange={(e) => setExpiresInDays(parseInt(e.target.value, 10))}
+                className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs focus:outline-none focus:border-emerald-500"
+              >
+                <option value={1}>24 Hours</option>
+                <option value={7}>7 Days</option>
+                <option value={30}>30 Days</option>
+                <option value={0}>Never (Admin Only)</option>
+              </select>
+            </div>
+
+            {generatedShareUrl ? (
+              <div className="space-y-3 pt-2">
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2 font-mono text-xs">
+                  <span className="truncate text-emerald-400">{generatedShareUrl}</span>
+                  <button
+                    onClick={handleCopyShareLink}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold transition flex items-center gap-1 shrink-0"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{copied ? "Copied!" : "Copy"}</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <a
+                    href={generatedShareUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex-1 px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-200 font-semibold text-xs transition text-center flex items-center justify-center gap-1.5"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Open Public Share Link</span>
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setShowShareModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold hover:bg-slate-700 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateShareLink}
+                  disabled={sharing}
+                  className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold transition flex items-center gap-2 disabled:opacity-50"
+                >
+                  {sharing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Generate Secure Link</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </Modal>
       )}
 
       {/* Generate Report Modal */}
