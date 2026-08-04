@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
+import CSVUploadModal from "@/components/feedback/CSVUploadModal";
 import {
   TrendingUp,
   MessageSquare,
@@ -11,6 +13,7 @@ import {
   Layers,
   Sparkles,
   CheckCircle2,
+  Upload,
 } from "lucide-react";
 
 import {
@@ -38,7 +41,6 @@ const volumeData = [
   { date: "Sat", total: 55, positive: 45, negative: 10 },
   { date: "Sun", total: 72, positive: 58, negative: 14 },
 ];
-
 
 const sentimentData = [
   { name: "Positive", value: 68, color: "#10B981" },
@@ -90,8 +92,9 @@ export default function DashboardPage() {
   const [positiveRatio, setPositiveRatio] = useState("82.4%");
   const [criticalSpikesCount, setCriticalSpikesCount] = useState(3);
   const [topThemes, setTopThemes] = useState(defaultThemesData);
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
 
-  useEffect(() => {
+  const fetchStats = useCallback(() => {
     fetch("/api/dashboard/stats")
       .then((res) => (res.ok ? res.json() : null))
       .then((stats) => {
@@ -100,18 +103,22 @@ export default function DashboardPage() {
           if (stats.positiveRatio) setPositiveRatio(stats.positiveRatio);
           if (stats.criticalSpikesCount !== undefined) setCriticalSpikesCount(stats.criticalSpikesCount);
           if (Array.isArray(stats.themes) && stats.themes.length > 0) {
-            setTopThemes(stats.themes.map((t: { title: string; mentions?: number; count?: number }) => ({
-              theme: t.title,
-              count: t.mentions || t.count || 20,
-              sentiment: 0.8,
-            })));
+            setTopThemes(
+              stats.themes.map((t: { title: string; mentions?: number; count?: number }) => ({
+                theme: t.title,
+                count: t.mentions || t.count || 20,
+                sentiment: 0.8,
+              }))
+            );
           }
         }
       })
-      .catch(() => {
-        // Fallback to initial state if offline
-      });
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
 
   return (
     <DashboardLayout>
@@ -130,6 +137,14 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsCsvModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold text-xs shadow-md transition"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Ingest Customer Feedback</span>
+          </button>
+
           <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1 text-xs font-semibold">
             <button
               onClick={() => setTimeRange("7d")}
@@ -200,7 +215,6 @@ export default function DashboardPage() {
           <p className="text-slate-400 text-xs mt-2">High severity negative quotes</p>
         </Card>
       </div>
-
 
       {/* Main Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -309,13 +323,14 @@ export default function DashboardPage() {
               <Layers className="w-4 h-4 text-emerald-400" />
               Top AI Theme Clusters
             </h3>
-            <span className="text-xs text-emerald-400 font-semibold cursor-pointer hover:underline">View All →</span>
+            <Link href="/trends" className="text-xs text-emerald-400 font-semibold hover:underline">
+              View All →
+            </Link>
           </div>
 
           <div className="h-64 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart layout="vertical" data={topThemes} margin={{ left: 20 }}>
-
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
                 <XAxis type="number" stroke="#64748b" fontSize={11} />
                 <YAxis dataKey="theme" type="category" stroke="#94a3b8" fontSize={11} width={130} />
@@ -340,7 +355,9 @@ export default function DashboardPage() {
               <Sparkles className="w-4 h-4 text-teal-400" />
               Recent AI Ingested Quotes
             </h3>
-            <span className="text-xs text-emerald-400 font-semibold cursor-pointer hover:underline">Inbox →</span>
+            <Link href="/feedback" className="text-xs text-emerald-400 font-semibold hover:underline">
+              Inbox →
+            </Link>
           </div>
 
           <div className="space-y-3">
@@ -369,7 +386,6 @@ export default function DashboardPage() {
 
                 <p className="text-xs text-slate-300 italic line-clamp-2">&quot;{item.quote}&quot;</p>
 
-
                 <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400">
                   <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">{item.channel}</span>
                   <span className="font-mono text-emerald-400 flex items-center gap-1">
@@ -381,6 +397,15 @@ export default function DashboardPage() {
           </div>
         </Card>
       </div>
+
+      {/* Shared CSV Upload Modal Single Source of Truth */}
+      <CSVUploadModal
+        isOpen={isCsvModalOpen}
+        onClose={() => setIsCsvModalOpen(false)}
+        onSuccess={() => {
+          fetchStats();
+        }}
+      />
     </DashboardLayout>
   );
 }
