@@ -8,10 +8,20 @@ import {
   retrieveAndRankEvidence,
   generateGroundedAnswer,
   FeedbackItem,
+  ChatMessage,
 } from "@/lib/rag";
 
 const askSchema = z.object({
   prompt: z.string().min(2, "Prompt must be at least 2 characters"),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string(),
+      })
+    )
+    .optional()
+    .default([]),
 });
 
 export async function POST(req: Request) {
@@ -30,7 +40,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { prompt } = askSchema.parse(body);
+    const { prompt, history } = askSchema.parse(body);
 
     const intent = detectIntent(prompt);
 
@@ -64,7 +74,7 @@ export async function POST(req: Request) {
       console.warn("DB feedback fetch fallback:", dbErr);
     }
 
-    // Fallback seed feedback for initial or empty state
+    // Fallback seed feedback if empty dataset
     if (dbItems.length === 0) {
       dbItems = [
         {
@@ -103,14 +113,22 @@ export async function POST(req: Request) {
     }
 
     // Process retrieval, ranking, deduplication, and grounded synthesis
-    const rankedEvidence = retrieveAndRankEvidence(prompt, dbItems, 8);
-    const result = generateGroundedAnswer(prompt, rankedEvidence, intent);
+    const { ranked, metrics: retMetrics } = retrieveAndRankEvidence(prompt, dbItems, 8);
+    const result = generateGroundedAnswer(
+      prompt,
+      ranked,
+      intent,
+      retMetrics,
+      workspaceId,
+      history as ChatMessage[]
+    );
 
     return NextResponse.json({
       intent: result.intent,
       answer: result.answer,
       citations: result.citations,
       groundedScore: result.groundedScore,
+      metrics: result.metrics,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
