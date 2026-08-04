@@ -6,12 +6,10 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Seeding enterprise demo data for Acme Production...");
 
-  // 1. Hash passwords
-  const adminPassword = await bcrypt.hash("Admin@2026!Loop", 12);
-  const analystPassword = await bcrypt.hash("Analyst@2026!Loop", 12);
-  const viewerPassword = await bcrypt.hash("Viewer@2026!Loop", 12);
+  // Known demo password
+  const demoPasswordHash = await bcrypt.hash("Loop@2026", 12);
 
-  // 2. Upsert Workspace
+  // 1. Upsert Workspace
   const workspace = await prisma.workspace.upsert({
     where: { slug: "acme-prod" },
     update: {},
@@ -24,47 +22,86 @@ async function main() {
     },
   });
 
-  // 3. Upsert Admin User
+  // 2. Upsert Admin User (admin@acme.demo & admin@loop.ai)
   const admin = await prisma.user.upsert({
     where: { email: "admin@acme.demo" },
-    update: { password: adminPassword },
+    update: { password: demoPasswordHash },
     create: {
       email: "admin@acme.demo",
       name: "Acme Admin User",
-      password: adminPassword,
+      password: demoPasswordHash,
       isVerified: true,
     },
   });
 
-  // 4. Upsert Analyst User
+  const adminAlias = await prisma.user.upsert({
+    where: { email: "admin@loop.ai" },
+    update: { password: demoPasswordHash },
+    create: {
+      email: "admin@loop.ai",
+      name: "Acme Admin User",
+      password: demoPasswordHash,
+      isVerified: true,
+    },
+  });
+
+  // 3. Upsert Analyst User (analyst@acme.demo & analyst@loop.ai)
   const analyst = await prisma.user.upsert({
     where: { email: "analyst@acme.demo" },
-    update: { password: analystPassword },
+    update: { password: demoPasswordHash },
     create: {
       email: "analyst@acme.demo",
       name: "Acme Lead Analyst",
-      password: analystPassword,
+      password: demoPasswordHash,
       isVerified: true,
     },
   });
 
-  // 5. Upsert Viewer User
+  const analystAlias = await prisma.user.upsert({
+    where: { email: "analyst@loop.ai" },
+    update: { password: demoPasswordHash },
+    create: {
+      email: "analyst@loop.ai",
+      name: "Acme Lead Analyst",
+      password: demoPasswordHash,
+      isVerified: true,
+    },
+  });
+
+  // 4. Upsert Viewer User (viewer@acme.demo & viewer@loop.ai)
   const viewer = await prisma.user.upsert({
     where: { email: "viewer@acme.demo" },
-    update: { password: viewerPassword },
+    update: { password: demoPasswordHash },
     create: {
       email: "viewer@acme.demo",
       name: "Acme Executive Viewer",
-      password: viewerPassword,
+      password: demoPasswordHash,
       isVerified: true,
     },
   });
 
-  // 6. Workspace Memberships
+  const viewerAlias = await prisma.user.upsert({
+    where: { email: "viewer@loop.ai" },
+    update: { password: demoPasswordHash },
+    create: {
+      email: "viewer@loop.ai",
+      name: "Acme Executive Viewer",
+      password: demoPasswordHash,
+      isVerified: true,
+    },
+  });
+
+  // 5. Workspace Memberships
   await prisma.workspaceMember.upsert({
     where: { workspaceId_userId: { workspaceId: workspace.id, userId: admin.id } },
     update: { role: Role.ADMIN },
     create: { workspaceId: workspace.id, userId: admin.id, role: Role.ADMIN },
+  });
+
+  await prisma.workspaceMember.upsert({
+    where: { workspaceId_userId: { workspaceId: workspace.id, userId: adminAlias.id } },
+    update: { role: Role.ADMIN },
+    create: { workspaceId: workspace.id, userId: adminAlias.id, role: Role.ADMIN },
   });
 
   await prisma.workspaceMember.upsert({
@@ -74,12 +111,24 @@ async function main() {
   });
 
   await prisma.workspaceMember.upsert({
+    where: { workspaceId_userId: { workspaceId: workspace.id, userId: analystAlias.id } },
+    update: { role: Role.ANALYST },
+    create: { workspaceId: workspace.id, userId: analystAlias.id, role: Role.ANALYST },
+  });
+
+  await prisma.workspaceMember.upsert({
     where: { workspaceId_userId: { workspaceId: workspace.id, userId: viewer.id } },
     update: { role: Role.VIEWER },
     create: { workspaceId: workspace.id, userId: viewer.id, role: Role.VIEWER },
   });
 
-  // 7. Feedback Themes
+  await prisma.workspaceMember.upsert({
+    where: { workspaceId_userId: { workspaceId: workspace.id, userId: viewerAlias.id } },
+    update: { role: Role.VIEWER },
+    create: { workspaceId: workspace.id, userId: viewerAlias.id, role: Role.VIEWER },
+  });
+
+  // 6. Feedback Themes
   const themes = [
     { title: "Dashboard Latency", description: "Queries and metric loading times during peak hours", color: "rose" },
     { title: "Onboarding Guidance", description: "Team invite workflow and initial workspace setup", color: "amber" },
@@ -103,7 +152,7 @@ async function main() {
     createdThemes.push(theme);
   }
 
-  // 8. Seed 500 Realistic Feedback Records
+  // 7. Seed 500 Realistic Feedback Records
   const channels: FeedbackChannel[] = [
     FeedbackChannel.SUPPORT_TICKET,
     FeedbackChannel.APP_STORE_REVIEW,
@@ -176,7 +225,7 @@ async function main() {
     data: feedbackData,
   });
 
-  // 9. Reports Seed
+  // 8. Reports Seed
   await prisma.report.create({
     data: {
       workspaceId: workspace.id,
@@ -188,18 +237,18 @@ async function main() {
     },
   });
 
-  // 10. Audit Log Seed
+  // 9. Audit Log Seed
   await prisma.auditLog.create({
     data: {
       workspaceId: workspace.id,
       userId: admin.id,
       action: "WORKSPACE_SEEDED",
       entityType: "Workspace",
-      details: "Seeded 500 feedback items and 3 demo accounts (Admin, Analyst, Viewer).",
+      details: "Seeded 500 feedback items and verified demo accounts (Admin, Analyst, Viewer).",
     },
   });
 
-  console.log("✅ Enterprise demo seed completed successfully!");
+  console.log("✅ Enterprise demo seed completed successfully with verified password: Loop@2026");
 }
 
 main()

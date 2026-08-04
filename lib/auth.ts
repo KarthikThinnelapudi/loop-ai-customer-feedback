@@ -41,7 +41,7 @@ const providers: NextAuthOptions["providers"] = [
 
         if (user) {
           const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
-          const isDemoPassword = isDemoAccount && credentials.password === "Password123!";
+          const isDemoPassword = isDemoAccount && (credentials.password === "Loop@2026" || credentials.password === "Password123!" || credentials.password === "Admin@2026!Loop");
 
           if (isPasswordValid || isDemoPassword) {
             const primaryMembership = user.memberships[0];
@@ -56,13 +56,14 @@ const providers: NextAuthOptions["providers"] = [
             };
           }
         }
+
       } catch (dbError: unknown) {
         console.warn("Database lookup fallback during auth:", dbError);
       }
 
       // 2. Demo Fallback (for demo accounts if DB is unseeded)
       if (IS_DEMO_MODE || isDemoAccount) {
-        if (credentials.password === "Password123!" || isDemoAccount) {
+        if (credentials.password === "Loop@2026" || credentials.password === "Password123!" || credentials.password === "Admin@2026!Loop" || isDemoAccount) {
           const role = normalizedEmail.includes("analyst")
             ? "ANALYST"
             : normalizedEmail.includes("viewer")
@@ -71,13 +72,14 @@ const providers: NextAuthOptions["providers"] = [
 
           return {
             id: `demo-${role.toLowerCase()}-1`,
-            name: role === "ADMIN" ? "Admin User" : role === "ANALYST" ? "Sarah Analyst" : "John Viewer",
+            name: role === "ADMIN" ? "Acme Admin User" : role === "ANALYST" ? "Acme Lead Analyst" : "Acme Executive Viewer",
             email: normalizedEmail,
             role,
             workspaceId: "ws_acme_prod_9921",
           };
         }
       }
+
 
       return null;
     },
