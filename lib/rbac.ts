@@ -2,82 +2,169 @@ export type Role =
   | "OWNER"
   | "ADMIN"
   | "MANAGER"
-  | "MEMBER"
   | "ANALYST"
   | "ANALYST_ASSISTANT"
   | "REVIEWER"
-  | "VIEWER";
+  | "VIEWER"
+  | "MEMBER";
 
 export type Permission =
-  | "workspace:delete"
-  | "workspace:billing"
-  | "users:manage"
-  | "users:invite"
-  | "roles:manage"
-  | "integrations:configure"
-  | "feedback:manage"
+  | "dashboard:view"
+  | "feedback:view"
+  | "feedback:create"
+  | "feedback:edit"
+  | "feedback:edit_own"
+  | "feedback:delete"
+  | "feedback:status"
+  | "feedback:assign"
+  | "csv:upload"
   | "feedback:import"
-  | "ai:configure"
   | "ai:analyze"
+  | "analytics:view"
+  | "trends:view"
+  | "ask_ai:access"
   | "reports:generate"
-  | "feedback:review"
+  | "reports:view"
+  | "reports:download_pdf"
+  | "csv:export"
+  | "reports:share"
+  | "team:view"
+  | "users:invite"
+  | "users:manage"
+  | "audit:view"
+  | "workspace:settings"
+  | "workspace:delete"
   | "read:all";
 
 const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   OWNER: [
-    "workspace:delete",
-    "workspace:billing",
-    "users:manage",
-    "users:invite",
-    "roles:manage",
-    "integrations:configure",
-    "feedback:manage",
+    "dashboard:view",
+    "feedback:view",
+    "feedback:create",
+    "feedback:edit",
+    "feedback:delete",
+    "feedback:status",
+    "feedback:assign",
+    "csv:upload",
     "feedback:import",
-    "ai:configure",
     "ai:analyze",
+    "analytics:view",
+    "trends:view",
+    "ask_ai:access",
     "reports:generate",
-    "feedback:review",
+    "reports:view",
+    "reports:download_pdf",
+    "csv:export",
+    "reports:share",
+    "team:view",
+    "users:invite",
+    "users:manage",
+    "audit:view",
+    "workspace:settings",
+    "workspace:delete",
     "read:all",
   ],
   ADMIN: [
-    "users:manage",
-    "users:invite",
-    "roles:manage",
-    "integrations:configure",
-    "feedback:manage",
+    "dashboard:view",
+    "feedback:view",
+    "feedback:create",
+    "feedback:edit",
+    "feedback:delete",
+    "feedback:status",
+    "feedback:assign",
+    "csv:upload",
     "feedback:import",
-    "ai:configure",
     "ai:analyze",
+    "analytics:view",
+    "trends:view",
+    "ask_ai:access",
     "reports:generate",
-    "feedback:review",
+    "reports:view",
+    "reports:download_pdf",
+    "csv:export",
+    "reports:share",
+    "team:view",
+    "users:invite",
+    "users:manage",
+    "audit:view",
+    "workspace:settings",
     "read:all",
   ],
   MANAGER: [
-    "feedback:manage",
-    "feedback:review",
+    "dashboard:view",
+    "feedback:view",
+    "feedback:create",
+    "feedback:edit",
+    "feedback:delete",
+    "feedback:status",
+    "feedback:assign",
+    "csv:upload",
+    "feedback:import",
+    "ai:analyze",
+    "analytics:view",
+    "trends:view",
+    "ask_ai:access",
     "reports:generate",
+    "reports:view",
+    "reports:download_pdf",
+    "csv:export",
+    "reports:share",
+    "team:view",
+    "audit:view",
     "read:all",
   ],
   ANALYST: [
+    "dashboard:view",
+    "feedback:view",
+    "feedback:create",
+    "feedback:edit",
+    "feedback:status",
+    "feedback:assign",
+    "csv:upload",
     "feedback:import",
     "ai:analyze",
+    "analytics:view",
+    "trends:view",
+    "ask_ai:access",
     "reports:generate",
+    "reports:view",
+    "reports:download_pdf",
+    "csv:export",
+    "reports:share",
     "read:all",
   ],
   ANALYST_ASSISTANT: [
+    "dashboard:view",
+    "feedback:view",
+    "csv:upload",
     "feedback:import",
     "ai:analyze",
-    "read:all",
-  ],
-  MEMBER: [
-    "feedback:manage",
+    "ask_ai:access",
+    "reports:view",
+    "reports:download_pdf",
     "read:all",
   ],
   REVIEWER: [
-    "feedback:review",
+    "dashboard:view",
+    "feedback:view",
+    "feedback:status",
+    "reports:view",
+    "reports:download_pdf",
     "read:all",
   ],
   VIEWER: [
+    "dashboard:view",
+    "feedback:view",
+    "reports:view",
+    "reports:download_pdf",
+    "read:all",
+  ],
+  MEMBER: [
+    "dashboard:view",
+    "feedback:view",
+    "feedback:edit_own",
+    "reports:view",
+    "reports:download_pdf",
     "read:all",
   ],
 };

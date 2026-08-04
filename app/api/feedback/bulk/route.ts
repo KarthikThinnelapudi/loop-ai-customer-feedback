@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     const { action, ids, status } = bulkSchema.parse(body);
 
     if (action === "delete") {
-      if (!hasPermission(role, "feedback:manage")) {
+      if (!hasPermission(role, "feedback:delete")) {
         return NextResponse.json({ message: "Forbidden: Delete requires Owner, Admin, or Manager role" }, { status: 403 });
       }
       await db.feedback.updateMany({
@@ -43,19 +43,23 @@ export async function POST(req: Request) {
         data: { deletedAt: new Date() },
       });
     } else if (action === "archive") {
-      if (!hasPermission(role, "feedback:manage")) {
-        return NextResponse.json({ message: "Forbidden: Archive requires Manage permission" }, { status: 403 });
+      if (!hasPermission(role, "feedback:edit")) {
+        return NextResponse.json({ message: "Forbidden: Archive requires Edit permission" }, { status: 403 });
       }
       await db.feedback.updateMany({
         where: { id: { in: ids }, workspaceId },
         data: { status: "ARCHIVED" },
       });
     } else if (action === "changeStatus" && status) {
+      if (!hasPermission(role, "feedback:status")) {
+        return NextResponse.json({ message: "Forbidden: Status change requires Reviewer or higher role" }, { status: 403 });
+      }
       await db.feedback.updateMany({
         where: { id: { in: ids }, workspaceId },
         data: { status },
       });
     }
+
 
     await db.auditLog.create({
       data: {

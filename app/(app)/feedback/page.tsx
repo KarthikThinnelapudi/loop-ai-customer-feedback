@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
 import SearchBar from "@/components/common/SearchBar";
@@ -17,10 +18,12 @@ import {
   Upload,
   Plus,
   Archive,
+  ShieldAlert,
 } from "lucide-react";
 
 import CSVUploadModal from "@/components/feedback/CSVUploadModal";
 import FeedbackModal, { FeedbackFormValues } from "@/components/feedback/FeedbackModal";
+import { hasPermission } from "@/lib/rbac";
 
 interface FeedbackItem {
   id: string;
@@ -87,6 +90,15 @@ const mockFeedbackData: FeedbackItem[] = [
 ];
 
 export default function FeedbackInboxPage() {
+  const { data: session } = useSession();
+  const userRole = (session?.user as { role?: string })?.role?.toUpperCase() || "VIEWER";
+
+  const canCreate = hasPermission(userRole, "feedback:create");
+  const canEdit = hasPermission(userRole, "feedback:edit");
+  const canDelete = hasPermission(userRole, "feedback:delete");
+  const canStatus = hasPermission(userRole, "feedback:status");
+  const canImport = hasPermission(userRole, "csv:upload");
+
   const [search, setSearch] = useState("");
   const [selectedSentiment, setSelectedSentiment] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
@@ -97,7 +109,6 @@ export default function FeedbackInboxPage() {
   const [isCSVModalOpen, setIsCSVModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-
 
   const fetchFeedback = () => {
     fetch("/api/feedback")
@@ -179,6 +190,7 @@ export default function FeedbackInboxPage() {
   };
 
   const handleStatusChange = async (id: string, newStatus: "NEW" | "REVIEWED" | "ACTIONED" | "ARCHIVED") => {
+    if (!canStatus) return;
     setData((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status: newStatus } : item))
     );
@@ -190,12 +202,14 @@ export default function FeedbackInboxPage() {
   };
 
   const handleDeleteItem = async (id: string) => {
+    if (!canDelete) return;
     if (!confirm("Are you sure you want to soft delete this feedback record?")) return;
     setData((prev) => prev.filter((item) => item.id !== id));
     await fetch(`/api/feedback/${id}`, { method: "DELETE" });
   };
 
   const handleDuplicateItem = async (id: string) => {
+    if (!canCreate) return;
     const res = await fetch("/api/feedback/duplicate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -206,6 +220,9 @@ export default function FeedbackInboxPage() {
 
   const handleBulkAction = async (action: "delete" | "archive") => {
     if (selectedIds.length === 0) return;
+    if (action === "delete" && !canDelete) return;
+    if (action === "archive" && !canEdit) return;
+
     if (!confirm(`Are you sure you want to ${action} ${selectedIds.length} selected items?`)) return;
 
     await fetch("/api/feedback/bulk", {
@@ -220,6 +237,14 @@ export default function FeedbackInboxPage() {
 
   return (
     <DashboardLayout>
+      {/* Read-Only Notice Banner for Viewer Role */}
+      {userRole === "VIEWER" && (
+        <div className="mb-4 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3 text-amber-300 text-xs font-medium">
+          <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
+          <span>You are viewing in <strong>READ-ONLY</strong> mode (Viewer Role). Administrative, edit, and ingestion controls are disabled.</span>
+        </div>
+      )}
+
       {/* Top Title & Header Action Buttons */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
         <div>
@@ -233,45 +258,53 @@ export default function FeedbackInboxPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs transition flex items-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Feedback</span>
-          </button>
+          {canCreate && (
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs transition flex items-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Feedback</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => setIsCSVModalOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-200 font-bold text-xs transition flex items-center gap-2"
-          >
-            <Upload className="w-4 h-4 text-emerald-400" />
-            <span>Import CSV</span>
-          </button>
+          {canImport && (
+            <button
+              onClick={() => setIsCSVModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-200 font-bold text-xs transition flex items-center gap-2"
+            >
+              <Upload className="w-4 h-4 text-emerald-400" />
+              <span>Import CSV</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Bulk Action Bar */}
-      {selectedIds.length > 0 && (
+      {selectedIds.length > 0 && (canEdit || canDelete) && (
         <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-xs text-white">
           <span className="font-semibold text-emerald-300">
             {selectedIds.length} records selected
           </span>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => handleBulkAction("archive")}
-              className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-200 font-medium transition flex items-center gap-1.5"
-            >
-              <Archive className="w-3.5 h-3.5 text-amber-400" />
-              <span>Archive Selected</span>
-            </button>
-            <button
-              onClick={() => handleBulkAction("delete")}
-              className="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-medium transition flex items-center gap-1.5"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete Selected</span>
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => handleBulkAction("archive")}
+                className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-200 font-medium transition flex items-center gap-1.5"
+              >
+                <Archive className="w-3.5 h-3.5 text-amber-400" />
+                <span>Archive Selected</span>
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={() => handleBulkAction("delete")}
+                className="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-medium transition flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Selected</span>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -333,14 +366,16 @@ export default function FeedbackInboxPage() {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-950 border-b border-slate-800 text-slate-400 font-mono uppercase tracking-wider">
                 <tr>
-                  <th className="py-4 px-4 w-10">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.length === filteredData.length && filteredData.length > 0}
-                      onChange={(e) => handleSelectAll(e.target.checked)}
-                      className="rounded border-slate-800 bg-slate-900 text-emerald-500 focus:ring-0"
-                    />
-                  </th>
+                  {(canEdit || canDelete) && (
+                    <th className="py-4 px-4 w-10">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.length === filteredData.length && filteredData.length > 0}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        className="rounded border-slate-800 bg-slate-900 text-emerald-500 focus:ring-0"
+                      />
+                    </th>
+                  )}
                   <th className="py-4 px-6">Customer & Company</th>
                   <th className="py-4 px-6">Feedback Quote</th>
                   <th className="py-4 px-6">Category & Priority</th>
@@ -352,14 +387,16 @@ export default function FeedbackInboxPage() {
               <tbody className="divide-y divide-slate-800/60 text-slate-300">
                 {filteredData.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-900/50 transition">
-                    <td className="py-4 px-4">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(item.id)}
-                        onChange={() => handleToggleSelect(item.id)}
-                        className="rounded border-slate-800 bg-slate-900 text-emerald-500 focus:ring-0"
-                      />
-                    </td>
+                    {(canEdit || canDelete) && (
+                      <td className="py-4 px-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(item.id)}
+                          onChange={() => handleToggleSelect(item.id)}
+                          className="rounded border-slate-800 bg-slate-900 text-emerald-500 focus:ring-0"
+                        />
+                      </td>
+                    )}
 
                     <td className="py-4 px-6 font-medium whitespace-nowrap">
                       <div className="font-semibold text-white">{item.customerLabel}</div>
@@ -398,26 +435,40 @@ export default function FeedbackInboxPage() {
                     </td>
 
                     <td className="py-4 px-6 whitespace-nowrap">
-                      <select
-                        value={item.status}
-                        onChange={(e) =>
-                          handleStatusChange(item.id, e.target.value as FeedbackItem["status"])
-                        }
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border focus:outline-none ${
-                          item.status === "ACTIONED"
-                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                            : item.status === "REVIEWED"
-                            ? "bg-blue-500/20 text-blue-300 border-blue-500/40"
-                            : item.status === "ARCHIVED"
-                            ? "bg-slate-800 text-slate-400 border-slate-700"
-                            : "bg-slate-900 text-slate-300 border-slate-700"
-                        }`}
-                      >
-                        <option value="NEW">NEW</option>
-                        <option value="REVIEWED">REVIEWED</option>
-                        <option value="ACTIONED">ACTIONED</option>
-                        <option value="ARCHIVED">ARCHIVED</option>
-                      </select>
+                      {canStatus ? (
+                        <select
+                          value={item.status}
+                          onChange={(e) =>
+                            handleStatusChange(item.id, e.target.value as FeedbackItem["status"])
+                          }
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold border focus:outline-none ${
+                            item.status === "ACTIONED"
+                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                              : item.status === "REVIEWED"
+                              ? "bg-blue-500/20 text-blue-300 border-blue-500/40"
+                              : item.status === "ARCHIVED"
+                              ? "bg-slate-800 text-slate-400 border-slate-700"
+                              : "bg-slate-900 text-slate-300 border-slate-700"
+                          }`}
+                        >
+                          <option value="NEW">NEW</option>
+                          <option value="REVIEWED">REVIEWED</option>
+                          <option value="ACTIONED">ACTIONED</option>
+                          <option value="ARCHIVED">ARCHIVED</option>
+                        </select>
+                      ) : (
+                        <span
+                          className={`px-3 py-1 rounded-xl text-xs font-bold border ${
+                            item.status === "ACTIONED"
+                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                              : item.status === "REVIEWED"
+                              ? "bg-blue-500/20 text-blue-300 border-blue-500/40"
+                              : "bg-slate-900 text-slate-400 border-slate-800"
+                          }`}
+                        >
+                          {item.status}
+                        </span>
+                      )}
                     </td>
 
                     <td className="py-4 px-6 text-right whitespace-nowrap space-x-1.5">
@@ -429,46 +480,52 @@ export default function FeedbackInboxPage() {
                         <Eye className="w-3.5 h-3.5" />
                       </button>
 
-                      <button
-                        onClick={() => {
-                          setEditingItem({
-                            id: item.id,
-                            customerName: item.customerName || item.customerLabel,
-                            customerEmail: item.customerEmail || "",
-                            company: item.company || "",
-                            channel: item.channel as FeedbackFormValues["channel"],
-                            source: "Web Portal",
-                            rating: item.rating || 5,
-                            content: item.content,
-                            tags: item.themes.join(", "),
-                            category: item.category || "General",
-                            priority: (item.priority as FeedbackFormValues["priority"]) || "MEDIUM",
-                            status: item.status,
-                            product: item.product || "Core Platform",
-                          });
-                          setIsEditModalOpen(true);
-                        }}
-                        className="p-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 transition"
-                        title="Edit Record"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
+                      {canEdit && (
+                        <button
+                          onClick={() => {
+                            setEditingItem({
+                              id: item.id,
+                              customerName: item.customerName || item.customerLabel,
+                              customerEmail: item.customerEmail || "",
+                              company: item.company || "",
+                              channel: item.channel as FeedbackFormValues["channel"],
+                              source: "Web Portal",
+                              rating: item.rating || 5,
+                              content: item.content,
+                              tags: item.themes.join(", "),
+                              category: item.category || "General",
+                              priority: (item.priority as FeedbackFormValues["priority"]) || "MEDIUM",
+                              status: item.status,
+                              product: item.product || "Core Platform",
+                            });
+                            setIsEditModalOpen(true);
+                          }}
+                          className="p-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 transition"
+                          title="Edit Record"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
 
-                      <button
-                        onClick={() => handleDuplicateItem(item.id)}
-                        className="p-1.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 transition"
-                        title="Duplicate Record"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
+                      {canCreate && (
+                        <button
+                          onClick={() => handleDuplicateItem(item.id)}
+                          className="p-1.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 transition"
+                          title="Duplicate Record"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      )}
 
-                      <button
-                        onClick={() => handleDeleteItem(item.id)}
-                        className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition"
-                        title="Delete Record"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {canDelete && (
+                        <button
+                          onClick={() => handleDeleteItem(item.id)}
+                          className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition"
+                          title="Delete Record"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -524,29 +581,35 @@ export default function FeedbackInboxPage() {
       )}
 
       {/* CSV Upload Modal */}
-      <CSVUploadModal
-        isOpen={isCSVModalOpen}
-        onClose={() => setIsCSVModalOpen(false)}
-        onSuccess={() => fetchFeedback()}
-      />
+      {canImport && (
+        <CSVUploadModal
+          isOpen={isCSVModalOpen}
+          onClose={() => setIsCSVModalOpen(false)}
+          onSuccess={() => fetchFeedback()}
+        />
+      )}
 
       {/* Manual Create Modal */}
-      <FeedbackModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onSuccess={() => fetchFeedback()}
-      />
+      {canCreate && (
+        <FeedbackModal
+          isOpen={isCreateModalOpen}
+          onClose={() => setIsCreateModalOpen(false)}
+          onSuccess={() => fetchFeedback()}
+        />
+      )}
 
       {/* Full Edit Modal */}
-      <FeedbackModal
-        isOpen={isEditModalOpen}
-        onClose={() => {
-          setIsEditModalOpen(false);
-          setEditingItem(null);
-        }}
-        onSuccess={() => fetchFeedback()}
-        initialData={editingItem}
-      />
+      {canEdit && (
+        <FeedbackModal
+          isOpen={isEditModalOpen}
+          onClose={() => {
+            setIsEditModalOpen(false);
+            setEditingItem(null);
+          }}
+          onSuccess={() => fetchFeedback()}
+          initialData={editingItem}
+        />
+      )}
     </DashboardLayout>
   );
 }

@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
 import { IS_DEMO_MODE } from "@/lib/config";
+import { hasPermission } from "@/lib/rbac";
+
 
 const feedbackIngestSchema = z.object({
   content: z.string().min(5, "Feedback content must be at least 5 characters"),
@@ -148,10 +150,26 @@ export async function POST(req: Request) {
       include: { memberships: true },
     });
 
-    const workspaceId = currentUser?.memberships[0]?.workspaceId;
+    if (!currentUser) {
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
+    }
+
+    const userMembership = currentUser.memberships[0];
+    const role = userMembership?.role || "VIEWER";
+    const workspaceId = userMembership?.workspaceId;
+
+
     if (!workspaceId) {
       return NextResponse.json({ message: "Workspace required" }, { status: 400 });
     }
+
+    if (!hasPermission(role, "feedback:create")) {
+      return NextResponse.json(
+        { message: "Forbidden: Viewer and restricted roles cannot create feedback records." },
+        { status: 403 }
+      );
+    }
+
 
     const body = await req.json();
     const data = feedbackIngestSchema.parse(body);

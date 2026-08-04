@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
 import Modal from "@/components/common/Modal";
@@ -12,7 +13,9 @@ import {
   Printer,
   Trash2,
   Loader2,
+  ShieldAlert,
 } from "lucide-react";
+import { hasPermission } from "@/lib/rbac";
 
 interface ReportItem {
   id: string;
@@ -26,6 +29,12 @@ interface ReportItem {
 }
 
 export default function ReportsPage() {
+  const { data: session } = useSession();
+  const userRole = (session?.user as { role?: string })?.role?.toUpperCase() || "VIEWER";
+
+  const canGenerate = hasPermission(userRole, "reports:generate");
+  const canDeleteReport = hasPermission(userRole, "users:manage"); // Admin/Owner only
+
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -51,6 +60,7 @@ export default function ReportsPage() {
   }, []);
 
   const handleGenerateReport = async () => {
+    if (!canGenerate) return;
     setGenerating(true);
     setError(null);
     try {
@@ -76,6 +86,7 @@ export default function ReportsPage() {
   };
 
   const handleDeleteReport = async (id: string) => {
+    if (!canDeleteReport) return;
     if (!confirm("Are you sure you want to delete this report?")) return;
     try {
       const res = await fetch(`/api/reports/${id}`, { method: "DELETE" });
@@ -95,6 +106,14 @@ export default function ReportsPage() {
 
   return (
     <DashboardLayout>
+      {/* Read-Only Notice Banner for Viewer Role */}
+      {userRole === "VIEWER" && (
+        <div className="mb-4 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3 text-amber-300 text-xs font-medium">
+          <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
+          <span>You are viewing in <strong>READ-ONLY</strong> mode (Viewer Role). Report generation and deletion controls are disabled.</span>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
         <div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
@@ -107,13 +126,15 @@ export default function ReportsPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowGenerateModal(true)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold text-xs shadow-[0_0_25px_rgba(16,185,129,0.25)] hover:shadow-[0_0_35px_rgba(16,185,129,0.4)] transition"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Generate 1-Click VoC Digest</span>
-          </button>
+          {canGenerate && (
+            <button
+              onClick={() => setShowGenerateModal(true)}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold text-xs shadow-[0_0_25px_rgba(16,185,129,0.25)] hover:shadow-[0_0_35px_rgba(16,185,129,0.4)] transition"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Generate 1-Click VoC Digest</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -149,16 +170,18 @@ export default function ReportsPage() {
                   >
                     <div className="flex items-center justify-between">
                       <h4 className="text-sm font-bold text-white line-clamp-1">{rep.title}</h4>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteReport(rep.id);
-                        }}
-                        className="text-slate-500 hover:text-rose-400 transition"
-                        title="Delete Report"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {canDeleteReport && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteReport(rep.id);
+                          }}
+                          className="text-slate-500 hover:text-rose-400 transition"
+                          title="Delete Report"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                     <div className="flex items-center justify-between pt-1 text-[11px]">
                       <span className="text-emerald-400 font-semibold">
@@ -243,40 +266,42 @@ export default function ReportsPage() {
       )}
 
       {/* Generate Report Modal */}
-      <Modal
-        isOpen={showGenerateModal}
-        onClose={() => setShowGenerateModal(false)}
-        title="Generate Voice-of-Customer Report"
-      >
-        <div className="space-y-4 text-xs text-slate-300">
-          {error && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300">
-              {error}
+      {canGenerate && (
+        <Modal
+          isOpen={showGenerateModal}
+          onClose={() => setShowGenerateModal(false)}
+          title="Generate Voice-of-Customer Report"
+        >
+          <div className="space-y-4 text-xs text-slate-300">
+            {error && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300">
+                {error}
+              </div>
+            )}
+
+            <p>
+              Clicking &quot;Generate Report&quot; will query all customer feedback items in your workspace database, aggregate sentiment metrics, and generate an AI executive narrative digest.
+            </p>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowGenerateModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold hover:bg-slate-700 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleGenerateReport}
+                disabled={generating}
+                className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold transition flex items-center gap-2 disabled:opacity-50"
+              >
+                {generating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{generating ? "Synthesizing Report..." : "Generate Report"}</span>
+              </button>
             </div>
-          )}
-
-          <p>
-            Clicking &quot;Generate Report&quot; will query all customer feedback items in your workspace database, aggregate sentiment metrics, and generate an AI executive narrative digest.
-          </p>
-
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              onClick={() => setShowGenerateModal(false)}
-              className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold hover:bg-slate-700 transition"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleGenerateReport}
-              disabled={generating}
-              className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold transition flex items-center gap-2 disabled:opacity-50"
-            >
-              {generating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              <span>{generating ? "Synthesizing Report..." : "Generate Report"}</span>
-            </button>
           </div>
-        </div>
-      </Modal>
+        </Modal>
+      )}
     </DashboardLayout>
   );
 }

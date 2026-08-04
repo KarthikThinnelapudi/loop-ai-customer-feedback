@@ -67,12 +67,13 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     }
 
     // Analyst & Viewer are NOT allowed to delete reports
-    if (role === "ANALYST" || role === "VIEWER" || !hasPermission(role, "roles:manage")) {
+    if (role === "ANALYST" || role === "VIEWER" || !hasPermission(role, "users:manage")) {
       return NextResponse.json(
         { message: "Forbidden: Delete Reports is restricted to Admin & Owner roles." },
         { status: 403 }
       );
     }
+
 
     await db.report.delete({ where: { id } });
 

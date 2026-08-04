@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
+import { hasPermission } from "@/lib/rbac";
+
 
 const duplicateSchema = z.object({
   id: z.string().min(1, "Feedback ID is required"),
@@ -21,11 +23,21 @@ export async function POST(req: Request) {
     });
 
     const userMembership = currentUser?.memberships[0];
+    const role = userMembership?.role || "VIEWER";
+
     if (!userMembership) {
       return NextResponse.json({ message: "Workspace required" }, { status: 403 });
     }
 
+    if (!hasPermission(role, "feedback:create")) {
+      return NextResponse.json(
+        { message: "Forbidden: Viewer role cannot duplicate feedback records." },
+        { status: 403 }
+      );
+    }
+
     const workspaceId = userMembership.workspaceId;
+
     const body = await req.json();
     const { id } = duplicateSchema.parse(body);
 

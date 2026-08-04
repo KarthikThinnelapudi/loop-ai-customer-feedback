@@ -81,6 +81,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const body = await req.json();
     const data = updateFeedbackSchema.parse(body);
 
+    // If attempting full content/field edit, require feedback:edit
+    if ((data.content || data.customerName || data.company) && !hasPermission(role, "feedback:edit")) {
+      return NextResponse.json(
+        { message: "Forbidden: Viewer and restricted roles cannot edit feedback records." },
+        { status: 403 }
+      );
+    }
+
+    // If attempting status workflow change, require feedback:status
+    if (data.status && !hasPermission(role, "feedback:status") && !hasPermission(role, "feedback:edit")) {
+      return NextResponse.json(
+        { message: "Forbidden: Viewer role cannot update feedback status." },
+        { status: 403 }
+      );
+    }
+
+
     const existing = await db.feedback.findFirst({
       where: { id, workspaceId },
     });
@@ -158,12 +175,13 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       return NextResponse.json({ message: "Workspace required" }, { status: 403 });
     }
 
-    if (!hasPermission(role, "feedback:manage")) {
+    if (!hasPermission(role, "feedback:delete")) {
       return NextResponse.json(
         { message: "Forbidden: Delete requires Owner, Admin, or Manager permission" },
         { status: 403 }
       );
     }
+
 
     await db.feedback.update({
       where: { id },
