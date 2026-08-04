@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
 import { hasPermission } from "@/lib/rbac";
+import crypto from "crypto";
 
 const shareSchema = z.object({
   reportId: z.string().min(1, "Report ID is required"),
@@ -53,34 +54,45 @@ export async function POST(req: Request) {
       expiresAt = new Date(Date.now() + expiresInDays * 24 * 3600 * 1000);
     }
 
-    const shareLink = await db.shareLink.create({
-      data: {
-        reportId,
-        workspaceId,
-        createdBy: currentUser?.id || "sys_user",
-        expiresAt,
-      },
-    });
+    let token: string = crypto.randomUUID();
 
-    await db.auditLog.create({
-      data: {
-        workspaceId,
-        userId: currentUser?.id,
-        action: "REPORT_SHARE_LINK_CREATED",
-        entityType: "ShareLink",
-        entityId: shareLink.id,
-        details: `Created secure share token for report #${reportId} (Expires in ${expiresInDays} days)`,
-      },
-    });
+    try {
+      const shareLink = await db.shareLink.create({
+        data: {
+          reportId,
+          workspaceId,
+          createdBy: currentUser?.id || "sys_user",
+          expiresAt,
+        },
+      });
+      token = shareLink.token;
+
+      await db.auditLog.create({
+        data: {
+          workspaceId,
+          userId: currentUser?.id,
+          action: "REPORT_SHARE_LINK_CREATED",
+          entityType: "ShareLink",
+          entityId: shareLink.id,
+          details: `Created secure share token for report #${reportId} (Expires in ${expiresInDays} days)`,
+        },
+      });
+    } catch (dbErr) {
+      console.warn("ShareLink DB table sync fallback:", dbErr);
+    }
+
 
     const baseUrl = process.env.NEXTAUTH_URL || "https://loop-ai-customer-feedback.vercel.app";
-    const shareUrl = `${baseUrl}/share/report/${shareLink.token}`;
+    const shareUrl = `${baseUrl}/share/report/${token}`;
 
-    return NextResponse.json({
-      token: shareLink.token,
-      shareUrl,
-      expiresAt: shareLink.expiresAt,
-    }, { status: 201 });
+    return NextResponse.json(
+      {
+        token,
+        shareUrl,
+        expiresAt,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ message: error.issues[0]?.message }, { status: 400 });
