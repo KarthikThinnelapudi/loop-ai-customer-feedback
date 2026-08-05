@@ -1,32 +1,29 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { db } from "@/lib/db";
+import { z } from "zod";
 
-const verifySchema = z.object({
-  email: z.string().email("Invalid email format"),
-  token: z.string().min(1, "Verification token is required"),
+const verifyEmailSchema = z.object({
+  token: z.string().min(1, "Token is required"),
 });
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { email, token } = verifySchema.parse(body);
+    const { token } = verifyEmailSchema.parse(body);
 
-    const verificationToken = await db.verificationToken.findUnique({
-      where: {
-        identifier_token: {
-          identifier: email,
-          token,
-        },
-      },
+    const verificationToken = await db.verificationToken.findFirst({
+      where: { token },
     });
 
-    if (!verificationToken || verificationToken.expires < new Date()) {
-      return NextResponse.json(
-        { message: "Invalid or expired verification token." },
-        { status: 400 }
-      );
+    if (!verificationToken) {
+      return NextResponse.json({ message: "Invalid verification token." }, { status: 400 });
     }
+
+    if (verificationToken.expires < new Date()) {
+      return NextResponse.json({ message: "Verification token has expired." }, { status: 400 });
+    }
+
+    const email = verificationToken.identifier;
 
     // Activate user account
     await db.$transaction([
@@ -37,10 +34,8 @@ export async function POST(req: Request) {
           isVerified: true,
         },
       }),
-      db.verificationToken.delete({
-        where: {
-          token,
-        },
+      db.verificationToken.deleteMany({
+        where: { token },
       }),
     ]);
 
@@ -53,6 +48,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: error.issues[0]?.message }, { status: 400 });
     }
     console.error("Email Verification Error:", error);
-    return NextResponse.json({ message: "Internal server error during verification." }, { status: 500 });
+    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
   }
 }
