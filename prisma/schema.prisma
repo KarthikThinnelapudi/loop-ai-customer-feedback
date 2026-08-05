@@ -155,6 +155,8 @@ model Feedback {
   theme          FeedbackTheme?  @relation(fields: [themeId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
+  @@index([authorId])
+  @@index([themeId])
   @@index([status])
   @@index([channel])
   @@index([deletedAt])
@@ -177,6 +179,7 @@ model Report {
   shareLinks   ShareLink[]
 
   @@index([workspaceId])
+  @@index([authorId])
 }
 
 model ShareLink {
@@ -195,6 +198,7 @@ model ShareLink {
   report      Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
+  @@index([reportId])
   @@index([token])
 }
 
