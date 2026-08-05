@@ -96,7 +96,7 @@ export async function POST(req: Request) {
 
     // Process retrieval, ranking, deduplication, and grounded synthesis for current workspace
     const { ranked, metrics: retMetrics } = retrieveAndRankEvidence(prompt, dbItems, 8);
-    const result = generateGroundedAnswer(
+    const result = await generateGroundedAnswer(
       prompt,
       ranked,
       intent,
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
         userId: currentUser.id,
         action: "AI_QUERY_EXECUTED",
         entityType: "AskLOOP",
-        details: `Executed AI RAG query intent '${intent}' with ${ranked.length} cited evidence records.`,
+        details: `Executed AI RAG query intent '${intent}' with ${ranked.length} cited evidence records via ${result.metrics.provider || "AI Gateway"}.`,
       },
     });
 

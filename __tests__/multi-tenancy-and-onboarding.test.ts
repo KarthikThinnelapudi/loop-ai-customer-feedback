@@ -2,7 +2,7 @@ import assert from "assert";
 import { generateGroundedAnswer, retrieveAndRankEvidence, FeedbackItem } from "../lib/rag";
 import { hasPermission } from "../lib/rbac";
 
-export function runMultiTenancyAndOnboardingTests() {
+export async function runMultiTenancyAndOnboardingTests() {
   console.log("==================================================");
   console.log("🧪 RUNNING ENTERPRISE MULTI-TENANT & RBAC SECURITY SUITE");
   console.log("==================================================\n");
@@ -27,7 +27,7 @@ export function runMultiTenancyAndOnboardingTests() {
 
   // 2. AI Multi-Tenant Isolation
   console.log("2. Testing Cross-Workspace AI Grounding Isolation...");
-  const aiAnswerWorkspaceA = generateGroundedAnswer(
+  const aiAnswerWorkspaceA = await generateGroundedAnswer(
     "What are Beta LLC complaints?",
     searchForBetaInWorkspaceA,
     "CUSTOMER_COMPLAINTS",
@@ -45,7 +45,7 @@ export function runMultiTenancyAndOnboardingTests() {
   console.log("3. Testing Production New-User Onboarding Clean State...");
   const newUserEmptyDataset: FeedbackItem[] = [];
   const newUserRanked = retrieveAndRankEvidence("Summarize workspace feedback", newUserEmptyDataset).ranked;
-  const newUserRAGResult = generateGroundedAnswer(
+  const newUserRAGResult = await generateGroundedAnswer(
     "Summarize workspace feedback",
     newUserRanked,
     "SUMMARY",

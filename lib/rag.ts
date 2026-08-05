@@ -1,3 +1,5 @@
+import { generateAIGatewayResponse, AIProvider } from "./ai-gateway";
+
 export type IntentType =
   | "EXECUTIVE_REPORT"
   | "SUMMARY"
@@ -31,6 +33,8 @@ export interface RankedEvidence {
 }
 
 export interface RAGObservabilityMetrics {
+  provider?: string;
+  model?: string;
   retrievalLatencyMs: number;
   rerankingLatencyMs: number;
   generationLatencyMs: number;
@@ -328,16 +332,16 @@ export function retrieveAndRankEvidence(
 }
 
 /**
- * Enterprise Grounded Synthesis Engine with Response Caching, Memory & Zero-Echoing Guarantee
+ * Enterprise Grounded Synthesis Engine integrated with Centralized Multi-Provider AI Gateway
  */
-export function generateGroundedAnswer(
+export async function generateGroundedAnswer(
   rawPrompt: string,
   evidence: RankedEvidence[],
   intent: IntentType,
   retrievalMetrics?: Partial<RAGObservabilityMetrics>,
   workspaceId: string = "ws_acme_prod_9921",
   history: ChatMessage[] = []
-): GroundedRAGResult {
+): Promise<GroundedRAGResult> {
   const genStartTime = Date.now();
   const prompt = sanitizePrompt(rawPrompt);
 
@@ -363,6 +367,8 @@ export function generateGroundedAnswer(
       citations: [],
       groundedScore: 0.0,
       metrics: {
+        provider: "GroundedRAG",
+        model: "zero-evidence-policy",
         retrievalLatencyMs: retrievalMetrics?.retrievalLatencyMs || 0,
         rerankingLatencyMs: retrievalMetrics?.rerankingLatencyMs || 0,
         generationLatencyMs: Date.now() - genStartTime,
@@ -395,9 +401,48 @@ export function generateGroundedAnswer(
 
   const groundedScore = Number((Math.min(0.98, 0.65 + totalItems * 0.05)).toFixed(2));
 
-  // Executive Report Strict Markdown Format
-  if (intent === "EXECUTIVE_REPORT") {
-    const reportText = `# Executive Summary
+  // Construct System Prompt for AI Gateway / Gemini / Fallback LLMs
+  const systemPrompt = `You are Ask LOOP AI, an enterprise-grade Customer Feedback Intelligence assistant.
+You analyze customer evidence with strict zero-hallucination policy.
+Never invent quotes, features, or metrics not grounded in the provided customer feedback items.
+Format answers in clean Markdown with clear headings, bullet points, tables, and citations.`;
+
+  const userContextPrompt = `USER QUERY: "${prompt}"
+INTENT DETECTED: ${intent}
+ANALYZED EVIDENCE (${totalItems} items):
+${citations.map((c, i) => `[Citation ${i + 1}] (${c.customer} via ${c.channel}): "${c.quote}"`).join("\n")}
+
+CONVERSATION HISTORY (${history.length} turns):
+${history.map((h) => `${h.role.toUpperCase()}: ${h.content}`).join("\n")}
+
+Synthesize a comprehensive, executive-grade analysis based strictly on the grounded evidence above.`;
+
+  let answerText = "";
+  let activeProvider: AIProvider = "GroundedRAG";
+  let activeModel = "synthesizer-v2";
+  let tokensUsed = 320;
+  let estimatedCostUsd = 0.00064;
+
+  try {
+    // Route request through Centralized Multi-Provider AI Gateway (Gemini -> OpenRouter -> NVIDIA -> OmniRoute)
+    const gatewayRes = await generateAIGatewayResponse({
+      systemPrompt,
+      userPrompt: userContextPrompt,
+      temperature: 0.2,
+      maxTokens: 1024,
+    });
+
+    answerText = gatewayRes.answer;
+    activeProvider = gatewayRes.provider;
+    activeModel = gatewayRes.model;
+    tokensUsed = gatewayRes.tokensUsed;
+    estimatedCostUsd = gatewayRes.estimatedCostUsd;
+  } catch (gatewayErr) {
+    console.warn("AI Gateway fallback to in-memory synthesis engine:", gatewayErr);
+
+    // Fallback Grounded Synthesis Format (if external LLM API calls fail or offline)
+    if (intent === "EXECUTIVE_REPORT") {
+      answerText = `# Executive Summary
 Customer sentiment analysis across indexed feedback items indicates an overall net sentiment score of ${positiveRatio}% positive (${positiveCount} positive, ${negativeCount} negative, ${neutralCount} neutral). Key operational insights reveal critical focus areas across onboarding efficiency, system performance, and enterprise integration capabilities.
 
 ## Overall Sentiment
@@ -410,29 +455,6 @@ Customer sentiment analysis across indexed feedback items indicates an overall n
 2. **API & Ingestion Latency**: Intermittent timeout alerts during peak dataset volume.
 3. **Enterprise Compliance Demands**: Increasing requests for Okta SSO SAML authentication.
 
-## Top Pain Points
-- Team members report invitation link timeouts during initial workspace creation.
-- Large CSV file bulk uploads experience intermittent background worker retries.
-- Lack of granular role-based SAML mapping causes delays in enterprise security clearance.
-
-## Root Cause Analysis
-- **Primary Driver**: Legacy background job queues experience peak-hour lock contention on database ingestion handlers.
-- **Secondary Driver**: User onboarding flows lack asynchronous background invitation token dispatch.
-
-## Department Impact
-- **Customer Support**: 35% reduction in ticket volume achievable by resolving onboarding friction.
-- **Product & Engineering**: Immediate backlog priority required for SSO SAML & DB index optimizations.
-- **Sales & Customer Success**: Unblocks enterprise pipeline revenue by meeting security requirements.
-
-## Churn Risk
-- **Risk Rating**: MEDIUM-HIGH
-- **Mitigation Strategy**: Fast-track Okta SSO SAML integration and deploy database query optimization patches before Q4 renewal cycles.
-
-## Recommendations
-1. Deploy asynchronous queue architecture for bulk CSV ingestion and team invitation emails.
-2. Implement Okta SSO SAML single sign-on provider integration within 30 days.
-3. Establish automated latency SLA alerts on feedback stream ingestion endpoints.
-
 ## Priority Matrix
 | Priority | Feature / Issue | Severity | Target Timeline |
 |---|---|---|---|
@@ -441,121 +463,20 @@ Customer sentiment analysis across indexed feedback items indicates an overall n
 | P2 | CSV Bulk Ingestion Queue | Medium | 45 Days |
 
 ## Supporting Customer Quotes
-${citations
-  .map((c) => `- **${c.customer}** (${c.channel}): "${c.quote}"`)
-  .join("\n")}
+${citations.map((c) => `- **${c.customer}** (${c.channel}): "${c.quote}"`).join("\n")}
 
 ## Confidence Score
 - **Grounded Verification Score**: ${groundedScore} / 1.00
 - **Evidence Count**: ${totalItems} verified customer quotes analyzed without hallucination.`;
-
-    const genLatency = Date.now() - genStartTime;
-    const totalLat = (retrievalMetrics?.retrievalLatencyMs || 0) + (retrievalMetrics?.rerankingLatencyMs || 0) + genLatency;
-
-    const result: GroundedRAGResult = {
-      intent,
-      answer: reportText,
-      citations,
-      groundedScore,
-      metrics: {
-        retrievalLatencyMs: retrievalMetrics?.retrievalLatencyMs || 12,
-        rerankingLatencyMs: retrievalMetrics?.rerankingLatencyMs || 5,
-        generationLatencyMs: genLatency,
-        totalLatencyMs: totalLat,
-        tokensUsed: 420,
-        estimatedCostUsd: 0.00084,
-        cacheHit: false,
-      },
-    };
-
-    queryCache.set(cacheKey, { result, timestamp: Date.now() });
-    return result;
-  }
-
-  // Synthesis for other intent types
-  let structuredContent = "";
-
-  switch (intent) {
-    case "ROOT_CAUSE_ANALYSIS":
-      structuredContent = `### Root Cause Analysis Digest\n\n` +
-        `Analysis of indexed customer evidence highlights primary friction drivers:\n\n` +
-        `- **Primary Driver**: Structural latency in background execution and data processing.\n` +
-        `- **User Impact**: ${negativeCount > 0 ? `${negativeCount} negative reports` : "Minimal negative reports"} logged regarding workflow completion velocity.\n` +
-        `- **Resolution Path**: Optimize background thread pools and streamline setup steps.\n\n` +
-        `#### Key Customer Quotes:\n` +
-        citations.map((c) => `- "${c.quote}" — *${c.customer}*`).join("\n");
-      break;
-
-    case "COMPARISON":
-      structuredContent = `### Comparative Sentiment Synthesis\n\n` +
-        `| Metric / Dimension | Positive Findings | Negative / Pain Points |\n` +
-        `|---|---|---|\n` +
-        `| **User Experience** | Fast dashboard UI navigation (${positiveCount} positive) | Setup friction & docs (${negativeCount} negative) |\n` +
-        `| **Platform Velocity** | Report synthesis & AI auto-tagging | Ingestion queue timeouts under heavy load |\n\n` +
-        `#### Evidence Highlights:\n` +
-        citations.map((c) => `- **${c.customer}**: "${c.quote}"`).join("\n");
-      break;
-
-    case "TREND_ANALYSIS":
-      structuredContent = `### Customer Sentiment Trend Digest\n\n` +
-        `- **Overall Sentiment Ratio**: ${positiveRatio}% Positive across ${totalItems} indexed records.\n` +
-        `- **Volume Velocity**: Positive sentiment is rising on recent UI release performance, while friction spikes persist in team onboarding.\n` +
-        `- **Recommendation**: Address onboarding invitation bottlenecks to maintain positive growth trajectory.\n\n` +
-        `#### Analyzed Evidence Quotes:\n` +
-        citations.map((c) => `- "${c.quote}" — *${c.customer} (${c.channel})*`).join("\n");
-      break;
-
-    case "SENTIMENT_ANALYSIS":
-      structuredContent = `### Workspace Sentiment Breakdown\n\n` +
-        `- **Net Sentiment Score**: ${positiveRatio}% Positive (${avgSentiment > 0 ? "+" : ""}${avgSentiment.toFixed(2)} index)\n` +
-        `- **Positive Feedback Count**: ${positiveCount}\n` +
-        `- **Negative Feedback Count**: ${negativeCount}\n` +
-        `- **Neutral / Informational Count**: ${neutralCount}\n\n` +
-        `#### Supporting Evidence:\n` +
-        citations.map((c) => `- **${c.customer}**: "${c.quote}"`).join("\n");
-      break;
-
-    case "FEATURE_REQUESTS":
-      structuredContent = `### Top Requested Features & Integrations\n\n` +
-        `1. **Enterprise SSO & SAML Authentication**: High demand from corporate sales prospects.\n` +
-        `2. **Custom Webhook Export Endpoints**: Requested for automated data integration.\n` +
-        `3. **Enhanced CSV Column Mapping**: Flexible schema matching for bulk data imports.\n\n` +
-        `#### Supporting Customer Quotes:\n` +
-        citations.map((c) => `- "${c.quote}" — *${c.customer}*`).join("\n");
-      break;
-
-    case "CUSTOMER_COMPLAINTS":
-      structuredContent = `### Customer Complaints & Friction Summary\n\n` +
-        `Key friction areas identified in ${negativeCount} negative feedback items:\n\n` +
-        `- **Onboarding Delays**: Member invitation links timing out during initial workspace configuration.\n` +
-        `- **Ingestion Queue Timeouts**: Large dataset processing experiences background delays.\n` +
-        `- **Documentation Gaps**: Users request updated setup guides and API references.\n\n` +
-        `#### Direct Customer Quotes:\n` +
-        citations.map((c) => `- **${c.customer}** (${c.channel}): "${c.quote}"`).join("\n");
-      break;
-
-    case "RISK_ANALYSIS":
-      structuredContent = `### Churn Risk & Account Threat Analysis\n\n` +
-        `- **Identified Account Risks**: ${negativeCount > 0 ? `${negativeCount} accounts` : "0 accounts"} reported critical setup or API stability issues.\n` +
-        `- **Risk Severity**: ${negativeCount > 2 ? "HIGH" : "MODERATE"}\n` +
-        `- **Mitigation Roadmap**: Prioritize SSO SAML delivery and resolve database query timeouts.\n\n` +
-        `#### At-Risk Customer Statements:\n` +
-        citations.map((c) => `- "${c.quote}" — *${c.customer}*`).join("\n");
-      break;
-
-    default: // SUMMARY
-      structuredContent = `### Customer Feedback Executive Summary\n\n` +
+    } else {
+      answerText = `### Customer Feedback Synthesis Digest\n\n` +
         `Synthesized analysis across ${totalItems} indexed customer feedback items:\n\n` +
-        `- **Positive Highlights**: Customers praise recent UI performance upgrades and AI report synthesis features.\n` +
-        `- **Core Pain Points**: Onboarding team invitations and Okta SSO SAML integration requests represent primary improvement opportunities.\n` +
-        `- **Net Sentiment**: ${positiveRatio}% Positive ratio.\n\n` +
+        `- **Positive Highlights**: Customers praise UI performance and report synthesis features.\n` +
+        `- **Core Pain Points**: Onboarding team invitations and Okta SSO SAML integration requests represent primary focus areas.\n` +
+        `- **Net Sentiment Ratio**: ${positiveRatio}% Positive.\n\n` +
         `#### Grounded Evidence Quotes:\n` +
         citations.map((c) => `- **${c.customer}**: "${c.quote}"`).join("\n");
-      break;
-  }
-
-  if (history.length > 0) {
-    structuredContent += `\n\n*Grounded response context synthesized with ${history.length} prior conversation turns.*`;
+    }
   }
 
   const genLatency = Date.now() - genStartTime;
@@ -563,16 +484,18 @@ ${citations
 
   const finalResult: GroundedRAGResult = {
     intent,
-    answer: structuredContent,
+    answer: answerText,
     citations,
     groundedScore,
     metrics: {
+      provider: activeProvider,
+      model: activeModel,
       retrievalLatencyMs: retrievalMetrics?.retrievalLatencyMs || 10,
       rerankingLatencyMs: retrievalMetrics?.rerankingLatencyMs || 4,
       generationLatencyMs: genLatency,
       totalLatencyMs: totalLat,
-      tokensUsed: 310,
-      estimatedCostUsd: 0.00062,
+      tokensUsed,
+      estimatedCostUsd,
       cacheHit: false,
     },
   };
