@@ -1,24 +1,28 @@
 -- ============================================================================
--- SUPABASE COMPLETE ENTERPRISE RLS POLICIES REMEDIATION MIGRATION
--- Fixes every rls_enabled_no_policy warning by creating explicit, non-conflicting,
--- least-privilege SELECT, INSERT, UPDATE, and DELETE policies for all tables.
+-- SUPABASE COMPLETE ENTERPRISE RLS POLICIES & INDEX OPTIMIZATION MIGRATION
+-- 1. Drop redundant unused secondary indexes
+-- 2. Preserve & create all Foreign Key covering indexes
+-- 3. Enable RLS on all 13 tables
+-- 4. Create explicit SELECT, INSERT, UPDATE, DELETE policies for service_role, authenticated, and anon
 -- ============================================================================
 
--- Drop any prior policy definitions to prevent naming conflicts
-DO $$
-DECLARE
-  pol RECORD;
-BEGIN
-  FOR pol IN 
-    SELECT policyname, tablename 
-    FROM pg_policies 
-    WHERE schemaname = 'public'
-  LOOP
-    EXECUTE format('DROP POLICY IF EXISTS %I ON %I', pol.policyname, pol.tablename);
-  END LOOP;
-END $$;
+-- Step 1: Drop Redundant / Unused Secondary Indexes
+DROP INDEX IF EXISTS "Feedback_status_idx";
+DROP INDEX IF EXISTS "Feedback_channel_idx";
+DROP INDEX IF EXISTS "Feedback_deletedAt_idx";
+DROP INDEX IF EXISTS "InvitationToken_email_idx";
+DROP INDEX IF EXISTS "ShareLink_token_idx";
 
--- Enable RLS on all 13 tables (12 application tables + _prisma_migrations)
+-- Step 2: Create / Verify Foreign Key Covering Indexes
+CREATE INDEX IF NOT EXISTS "Feedback_authorId_idx" ON "Feedback"("authorId");
+CREATE INDEX IF NOT EXISTS "Feedback_themeId_idx" ON "Feedback"("themeId");
+CREATE INDEX IF NOT EXISTS "Report_authorId_idx" ON "Report"("authorId");
+CREATE INDEX IF NOT EXISTS "ShareLink_reportId_idx" ON "ShareLink"("reportId");
+CREATE INDEX IF NOT EXISTS "ShareLink_workspaceId_idx" ON "ShareLink"("workspaceId");
+CREATE INDEX IF NOT EXISTS "AuditLog_workspaceId_idx" ON "AuditLog"("workspaceId");
+CREATE INDEX IF NOT EXISTS "AuditLog_userId_idx" ON "AuditLog"("userId");
+
+-- Step 3: Enable RLS on all 13 tables (12 application tables + _prisma_migrations)
 ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Workspace" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "WorkspaceMember" ENABLE ROW LEVEL SECURITY;
@@ -32,6 +36,20 @@ ALTER TABLE "Session" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Account" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "VerificationToken" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "_prisma_migrations" ENABLE ROW LEVEL SECURITY;
+
+-- Step 4: Clean Drop and Re-create RLS Policies
+DO $$
+DECLARE
+  pol RECORD;
+BEGIN
+  FOR pol IN 
+    SELECT policyname, tablename 
+    FROM pg_policies 
+    WHERE schemaname = 'public'
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON %I', pol.policyname, pol.tablename);
+  END LOOP;
+END $$;
 
 -- 1. Account Policies
 CREATE POLICY "account_service_role_all" ON "Account" FOR ALL TO service_role USING (true) WITH CHECK (true);
@@ -160,7 +178,7 @@ CREATE POLICY "member_auth_delete" ON "WorkspaceMember" FOR DELETE TO authentica
 -- 13. _prisma_migrations Policy
 CREATE POLICY "prisma_migrations_service_role_all" ON "_prisma_migrations" FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- Revoke Public Access to Sensitive Models
+-- Revoke Public Privileges on Sensitive Tables
 REVOKE ALL ON TABLE "User" FROM anon, public;
 REVOKE ALL ON TABLE "Account" FROM anon, public;
 REVOKE ALL ON TABLE "Session" FROM anon, public;

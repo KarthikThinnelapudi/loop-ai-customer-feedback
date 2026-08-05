@@ -105,7 +105,6 @@ model InvitationToken {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
-  @@index([email])
 }
 
 model FeedbackTheme {
@@ -157,9 +156,6 @@ model Feedback {
   @@index([workspaceId])
   @@index([authorId])
   @@index([themeId])
-  @@index([status])
-  @@index([channel])
-  @@index([deletedAt])
 }
 
 model Report {
@@ -199,7 +195,6 @@ model ShareLink {
 
   @@index([workspaceId])
   @@index([reportId])
-  @@index([token])
 }
 
 model AuditLog {
