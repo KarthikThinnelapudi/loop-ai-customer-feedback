@@ -3,9 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
-import { IS_DEMO_MODE } from "@/lib/config";
 import { hasPermission } from "@/lib/rbac";
-
 
 const feedbackIngestSchema = z.object({
   content: z.string().min(5, "Feedback content must be at least 5 characters"),
@@ -24,6 +22,22 @@ const feedbackIngestSchema = z.object({
 
 export async function GET(req: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
+    const currentUser = await db.user.findUnique({
+      where: { email: session.user.email },
+      include: { memberships: true },
+    });
+
+    const workspaceId = currentUser?.memberships?.[0]?.workspaceId;
+
+    if (!workspaceId) {
+      return NextResponse.json({ message: "Workspace context required" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search") || "";
     const channel = searchParams.get("channel");
@@ -34,56 +48,6 @@ export async function GET(req: Request) {
     const sort = searchParams.get("sort") || "newest";
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "25", 10);
-
-    const session = await getServerSession(authOptions);
-    let workspaceId = "ws_acme_prod_9921"; // preview fallback
-
-    if (session?.user?.email) {
-      const user = await db.user.findUnique({
-        where: { email: session.user.email },
-        include: { memberships: true },
-      });
-      if (user?.memberships?.[0]?.workspaceId) {
-        workspaceId = user.memberships[0].workspaceId;
-      }
-    }
-
-    if (IS_DEMO_MODE) {
-      return NextResponse.json({
-        data: [
-          {
-            id: "fb-101",
-            content: "Onboarding took forever — I couldn't figure out how to invite my team.",
-            channel: "SUPPORT_TICKET",
-            customerName: "Sarah Jenkins",
-            company: "Stripe",
-            rating: 2,
-            category: "UX",
-            priority: "HIGH",
-            status: "NEW",
-            sentimentLabel: "NEGATIVE",
-            sentimentScore: -0.85,
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: "fb-102",
-            content: "The new dashboard is gorgeous and finally fast. Huge improvement!",
-            channel: "APP_STORE_REVIEW",
-            customerName: "David K.",
-            company: "Linear",
-            rating: 5,
-            category: "Performance",
-            priority: "LOW",
-            status: "REVIEWED",
-            sentimentLabel: "POSITIVE",
-            sentimentScore: 0.92,
-            createdAt: new Date(Date.now() - 3600000).toISOString(),
-          },
-        ],
-        pagination: { page: 1, limit, total: 2, totalPages: 1 },
-        mode: "DEMO",
-      });
-    }
 
     const where: Record<string, unknown> = { workspaceId };
     where.deletedAt = showDeleted ? { not: null } : null;
@@ -158,7 +122,6 @@ export async function POST(req: Request) {
     const role = userMembership?.role || "VIEWER";
     const workspaceId = userMembership?.workspaceId;
 
-
     if (!workspaceId) {
       return NextResponse.json({ message: "Workspace required" }, { status: 400 });
     }
@@ -169,7 +132,6 @@ export async function POST(req: Request) {
         { status: 403 }
       );
     }
-
 
     const body = await req.json();
     const data = feedbackIngestSchema.parse(body);

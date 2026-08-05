@@ -27,7 +27,7 @@ const askSchema = z.object({
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    let workspaceId = "ws_acme_prod_9921";
+    let workspaceId: string | null = null;
 
     if (session?.user?.email) {
       const user = await db.user.findUnique({
@@ -39,12 +39,16 @@ export async function POST(req: Request) {
       }
     }
 
+    if (!workspaceId) {
+      return NextResponse.json({ message: "Unauthorized or missing workspace context" }, { status: 401 });
+    }
+
     const body = await req.json();
     const { prompt, history } = askSchema.parse(body);
 
     const intent = detectIntent(prompt);
 
-    // Fetch workspace feedback items
+    // Fetch ONLY current workspace feedback items
     let dbItems: FeedbackItem[] = [];
     try {
       const rawFeedback = await db.feedback.findMany({
@@ -71,48 +75,10 @@ export async function POST(req: Request) {
         createdAt: f.createdAt,
       }));
     } catch (dbErr) {
-      console.warn("DB feedback fetch fallback:", dbErr);
+      console.warn("DB feedback fetch error:", dbErr);
     }
 
-    // Fallback seed feedback if empty dataset
-    if (dbItems.length === 0) {
-      dbItems = [
-        {
-          id: "fb-101",
-          content: "Onboarding took forever — I couldn't figure out how to invite my team. The docs were outdated.",
-          channel: "SUPPORT_TICKET",
-          customerName: "Sarah Jenkins (Stripe)",
-          sentimentScore: -0.8,
-          sentimentLabel: "NEGATIVE",
-        },
-        {
-          id: "fb-102",
-          content: "The new dashboard is gorgeous and finally fast. Huge performance improvement!",
-          channel: "APP_STORE_REVIEW",
-          customerName: "David K. (Linear)",
-          sentimentScore: 0.9,
-          sentimentLabel: "POSITIVE",
-        },
-        {
-          id: "fb-103",
-          content: "Prospect wants SSO SAML integration before signing the enterprise tier.",
-          channel: "SALES_CALL_NOTE",
-          customerName: "Enterprise Account Rep",
-          sentimentScore: 0.1,
-          sentimentLabel: "NEUTRAL",
-        },
-        {
-          id: "fb-104",
-          content: "Experiencing intermittent timeout errors during CSV bulk ingestion. Needs immediate triage.",
-          channel: "SUPPORT_TICKET",
-          customerName: "Dev Lead (Vercel)",
-          sentimentScore: -0.75,
-          sentimentLabel: "NEGATIVE",
-        },
-      ];
-    }
-
-    // Process retrieval, ranking, deduplication, and grounded synthesis
+    // Process retrieval, ranking, deduplication, and grounded synthesis for current workspace
     const { ranked, metrics: retMetrics } = retrieveAndRankEvidence(prompt, dbItems, 8);
     const result = generateGroundedAnswer(
       prompt,

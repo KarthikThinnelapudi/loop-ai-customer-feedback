@@ -19,27 +19,16 @@ export async function GET() {
     }
 
     if (!workspaceId) {
-      const firstWs = await db.workspace.findFirst();
-      workspaceId = firstWs?.id || null;
+      return NextResponse.json({ message: "Unauthorized or missing workspace context" }, { status: 401 });
     }
 
-    if (!workspaceId) {
-      return NextResponse.json({
-        totalVolume: 0,
-        avgSentiment: 0.0,
-        positiveRatio: "0%",
-        criticalSpikesCount: 0,
-        themes: [],
-        chartTrend: [],
-      });
-    }
-
+    // Scoped counts strictly for current workspace
     const totalVolume = await db.feedback.count({
-      where: { workspaceId },
+      where: { workspaceId, deletedAt: null },
     });
 
     const positiveCount = await db.feedback.count({
-      where: { workspaceId, sentimentLabel: "POSITIVE" },
+      where: { workspaceId, sentimentLabel: "POSITIVE", deletedAt: null },
     });
 
     const criticalSpikesCount = await db.feedbackTheme.count({
@@ -55,29 +44,31 @@ export async function GET() {
       take: 5,
     });
 
-    const positiveRatio = totalVolume > 0 ? `${((positiveCount / totalVolume) * 100).toFixed(1)}%` : "84.2%";
+    const aggregateSentiment = await db.feedback.aggregate({
+      where: { workspaceId, deletedAt: null },
+      _avg: { sentimentScore: true },
+    });
+
+    const avgSentiment = Number((aggregateSentiment._avg.sentimentScore || 0.0).toFixed(2));
+    const positiveRatio = totalVolume > 0 ? `${((positiveCount / totalVolume) * 100).toFixed(1)}%` : "0%";
 
     return NextResponse.json({
-      totalVolume: totalVolume || 10432,
-      avgSentiment: 0.84,
+      totalVolume,
+      avgSentiment,
       positiveRatio,
-      criticalSpikesCount: criticalSpikesCount || 3,
+      criticalSpikesCount,
       themes: themes.map((t) => ({
         id: t.id,
         title: t.title,
         description: t.description,
         color: t.color,
-        mentions: t._count.feedbacks || 42,
+        mentions: t._count.feedbacks || 0,
         growthRate: `${t.growthRate > 0 ? "+" : ""}${t.growthRate}%`,
         isSpike: t.isSpike,
       })),
-      chartTrend: [
-        { date: "Jul 1", volume: 40, sentiment: 0.75 },
-        { date: "Jul 7", volume: 65, sentiment: 0.8 },
-        { date: "Jul 14", volume: 85, sentiment: 0.78 },
-        { date: "Jul 21", volume: 110, sentiment: 0.86 },
-        { date: "Jul 28", volume: 140, sentiment: 0.92 },
-      ],
+      chartTrend: totalVolume > 0 ? [
+        { date: "Current", volume: totalVolume, sentiment: avgSentiment }
+      ] : [],
     });
   } catch (error) {
     console.error("GET Dashboard Stats Error:", error);
