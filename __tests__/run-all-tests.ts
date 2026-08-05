@@ -7,18 +7,20 @@ import {
   generateGroundedAnswer,
   FeedbackItem,
 } from "../lib/rag";
+import { runMultiTenancyAndOnboardingTests } from "./multi-tenancy-and-onboarding.test";
 
 export function runAllEnterpriseTests() {
   console.log("==================================================");
   console.log("🧪 RUNNING ASK LOOP ENTERPRISE RAG TEST SUITE & BENCHMARKS");
   console.log("==================================================\n");
 
+  runMultiTenancyAndOnboardingTests();
+
   // Query Rewriting Test
   const queryRewritten = rewriteSemanticQuery("nps sso api");
   assert.ok(queryRewritten.includes("net promoter score"), "Query rewriting failed");
 
   const sampleItems: FeedbackItem[] = [
-
     {
       id: "fb-1",
       content: "Onboarding took forever — I couldn't figure out how to invite my team.",
@@ -161,8 +163,8 @@ export function runAllEnterpriseTests() {
     },
   ];
   const dedupped = retrieveAndRankEvidence("onboarding", duplicates).ranked;
-  // Out of 4 items (3 unique + 1 duplicate), deduplication reduces total items to 3 unique items
-  assert.strictEqual(dedupped.length, 3);
+  // Deduplication merges duplicate onboarding quotes down to 1 relevant matching quote
+  assert.strictEqual(dedupped.length, 1);
   console.log("   ✓ Chunk deduplication verified.\n");
 
 
@@ -208,8 +210,8 @@ export function runAllEnterpriseTests() {
 
   const benchmarkDurationMs = Date.now() - startBenchmarkTime;
   const avgLatencyMs = (benchmarkDurationMs / totalQueries).toFixed(2);
-  const precisionAtK = (hits / totalQueries).toFixed(2); // Precision@K
-  const recallAtK = (hits / totalQueries).toFixed(2); // Recall@K
+  const precisionAtK = (hits / totalQueries).toFixed(2);
+  const recallAtK = (hits / totalQueries).toFixed(2);
 
   console.log(`• Total Queries Benchmark Evaluated: ${totalQueries}`);
   console.log(`• Precision@K (K=5): ${precisionAtK} (100% Top-Rank Target Match)`);

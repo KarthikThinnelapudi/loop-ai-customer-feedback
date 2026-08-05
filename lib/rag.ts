@@ -74,7 +74,7 @@ const STOP_WORDS = new Set([
 
 // In-Memory Query Response Cache
 const queryCache = new Map<string, { result: GroundedRAGResult; timestamp: number }>();
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
  * Sanitizes input prompt against prompt injection and malicious override attempts
@@ -82,7 +82,6 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 export function sanitizePrompt(prompt: string): string {
   let cleaned = prompt.trim();
 
-  // Strip prompt injection / system prompt override vectors
   const injectionPatterns = [
     /system\s*prompt:/gi,
     /ignore\s+previous\s+instructions/gi,
@@ -107,7 +106,6 @@ export function rewriteSemanticQuery(prompt: string): string {
   const rewritten = prompt;
 
   const acronymMap: Record<string, string> = {
-
     nps: "net promoter score satisfaction",
     sso: "single sign-on saml okta authentication",
     ui: "user interface design dashboard",
@@ -221,6 +219,7 @@ export function retrieveAndRankEvidence(
   const startTime = Date.now();
   const prompt = sanitizePrompt(rawPrompt);
   const rewritten = rewriteSemanticQuery(prompt);
+  const intent = detectIntent(prompt);
 
   if (!items || items.length === 0) {
     return {
@@ -252,7 +251,13 @@ export function retrieveAndRankEvidence(
 
   const retrievalEndTime = Date.now();
 
-  // 2. Hybrid Search Scoring (Full Text Search + Vector Keyword Score)
+  // Global synthesis applies to EXECUTIVE_REPORT or general query without specific entity keywords
+  const isGlobalSynthesis =
+    intent === "EXECUTIVE_REPORT" ||
+    ((intent === "SUMMARY" || intent === "SENTIMENT_ANALYSIS" || intent === "TREND_ANALYSIS") &&
+      keywords.length === 0);
+
+  // 2. Hybrid Search Scoring
   const fullTextRanks = [...uniqueItems].sort((a, b) => {
     const aMatch = keywords.filter((k) => a.content.toLowerCase().includes(k)).length;
     const bMatch = keywords.filter((k) => b.content.toLowerCase().includes(k)).length;
@@ -267,7 +272,7 @@ export function retrieveAndRankEvidence(
 
   // 3. Reciprocal Rank Fusion (RRF)
   const k = 60;
-  const scoredMap = new Map<string, { item: FeedbackItem; rrf: number; relevance: number }>();
+  const scoredMap = new Map<string, { item: FeedbackItem; rrf: number; relevance: number; matches: number }>();
 
   uniqueItems.forEach((item) => {
     const ftRank = fullTextRanks.findIndex((x) => x.id === item.id) + 1;
@@ -278,24 +283,24 @@ export function retrieveAndRankEvidence(
     const matches = keywords.filter((kw) => item.content.toLowerCase().includes(kw)).length;
     const relevance = keywords.length > 0 ? matches / keywords.length : 0.5;
 
-    scoredMap.set(item.id, { item, rrf, relevance });
+    scoredMap.set(item.id, { item, rrf, relevance, matches });
   });
 
   // 4. Cross-Encoder Multi-Factor Reranking (Relevance + Recency + Sentiment)
   const ranked: RankedEvidence[] = uniqueItems.map((item) => {
     const data = scoredMap.get(item.id)!;
 
-    // Recency Score Weight
     const ageDays = item.createdAt
       ? Math.max(0, (Date.now() - new Date(item.createdAt).getTime()) / (1000 * 3600 * 24))
       : 15;
     const recencyWeight = Math.max(0.2, 1 - ageDays / 60);
 
-    // Sentiment Signal Weight
     const sentimentWeight = Math.abs(item.sentimentScore || 0);
 
-    // Composite Rerank Score
-    const finalScore = data.relevance * 0.5 + recencyWeight * 0.3 + sentimentWeight * 0.2 + data.rrf * 10;
+    // If global synthesis or matched keywords, calculate composite score
+    const finalScore = (!isGlobalSynthesis && keywords.length > 0 && data.matches === 0)
+      ? 0
+      : (data.relevance * 0.5 + recencyWeight * 0.3 + sentimentWeight * 0.2 + data.rrf * 10);
 
     return {
       item,
@@ -306,7 +311,7 @@ export function retrieveAndRankEvidence(
 
   const rerankEndTime = Date.now();
 
-  const filtered = keywords.length > 0
+  const filtered = (!isGlobalSynthesis && keywords.length > 0)
     ? ranked.filter((r) => r.score > 0.4)
     : ranked;
 
@@ -549,7 +554,6 @@ ${citations
       break;
   }
 
-  // Include multi-turn conversation memory context indicator if present
   if (history.length > 0) {
     structuredContent += `\n\n*Grounded response context synthesized with ${history.length} prior conversation turns.*`;
   }
