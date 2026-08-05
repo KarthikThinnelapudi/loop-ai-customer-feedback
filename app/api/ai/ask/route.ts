@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
+import { hasPermission } from "@/lib/rbac";
 import {
   detectIntent,
   retrieveAndRankEvidence,
@@ -27,20 +28,35 @@ const askSchema = z.object({
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    let workspaceId: string | null = null;
-
-    if (session?.user?.email) {
-      const user = await db.user.findUnique({
-        where: { email: session.user.email },
-        include: { memberships: true },
-      });
-      if (user?.memberships?.[0]?.workspaceId) {
-        workspaceId = user.memberships[0].workspaceId;
-      }
+    if (!session?.user?.email) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
+    const sessionUser = session.user as { name?: string | null; email?: string | null; role?: string; workspaceId?: string };
+
+    const currentUser = await db.user.findUnique({
+      where: { email: sessionUser.email! },
+      include: { memberships: true },
+    });
+
+    if (!currentUser) {
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
+    }
+
+    const userMembership = currentUser.memberships[0];
+    const role = userMembership?.role || sessionUser.role || "VIEWER";
+    const workspaceId = userMembership?.workspaceId || sessionUser.workspaceId;
+
     if (!workspaceId) {
-      return NextResponse.json({ message: "Unauthorized or missing workspace context" }, { status: 401 });
+      return NextResponse.json({ message: "Workspace context required" }, { status: 401 });
+    }
+
+    // Strict RBAC Enforcement: Viewer cannot access AI
+    if (!hasPermission(role, "ask_ai:access")) {
+      return NextResponse.json(
+        { message: "Forbidden: Viewer role cannot access Ask LOOP AI." },
+        { status: 403 }
+      );
     }
 
     const body = await req.json();
@@ -88,6 +104,17 @@ export async function POST(req: Request) {
       workspaceId,
       history as ChatMessage[]
     );
+
+    // Log AI Audit Query
+    await db.auditLog.create({
+      data: {
+        workspaceId,
+        userId: currentUser.id,
+        action: "AI_QUERY_EXECUTED",
+        entityType: "AskLOOP",
+        details: `Executed AI RAG query intent '${intent}' with ${ranked.length} cited evidence records.`,
+      },
+    });
 
     return NextResponse.json({
       intent: result.intent,

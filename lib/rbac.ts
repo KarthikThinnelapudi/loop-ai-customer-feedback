@@ -150,14 +150,10 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "feedback:status",
     "reports:view",
     "reports:download_pdf",
-    "read:all",
   ],
   VIEWER: [
     "dashboard:view",
     "feedback:view",
-    "reports:view",
-    "reports:download_pdf",
-    "read:all",
   ],
   MEMBER: [
     "dashboard:view",
@@ -165,7 +161,6 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "feedback:edit_own",
     "reports:view",
     "reports:download_pdf",
-    "read:all",
   ],
 };
 

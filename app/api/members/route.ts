@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
+import { hasPermission } from "@/lib/rbac";
 import { sendEmail, getWorkspaceInviteEmailTemplate } from "@/lib/email";
 
 const memberInviteSchema = z.object({
@@ -17,16 +18,27 @@ export async function GET() {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
+    const sessionUser = session.user as { name?: string | null; email?: string | null; role?: string; workspaceId?: string };
+
     const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
+      where: { email: sessionUser.email! },
       include: { memberships: true },
     });
 
-    if (!currentUser || currentUser.memberships.length === 0) {
+    const userMembership = currentUser?.memberships[0];
+    const role = userMembership?.role || sessionUser.role || "VIEWER";
+    const workspaceId = userMembership?.workspaceId || sessionUser.workspaceId;
+
+    if (!workspaceId) {
       return NextResponse.json({ message: "Workspace membership required" }, { status: 403 });
     }
 
-    const workspaceId = currentUser.memberships[0].workspaceId;
+    if (!hasPermission(role, "team:view")) {
+      return NextResponse.json(
+        { message: "Forbidden: Viewer and unauthorized roles cannot view team members." },
+        { status: 403 }
+      );
+    }
 
     const members = await db.workspaceMember.findMany({
       where: { workspaceId },
@@ -58,29 +70,62 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
+    const sessionUser = session.user as { name?: string | null; email?: string | null; role?: string; workspaceId?: string };
     const body = await req.json();
     const data = memberInviteSchema.parse(body);
 
     const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
+      where: { email: sessionUser.email! },
       include: { memberships: { include: { workspace: true } } },
     });
 
-    const userMembership = currentUser?.memberships[0];
-    if (!userMembership || (userMembership.role !== "ADMIN" && userMembership.role !== "MANAGER")) {
+    if (!currentUser) {
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
+    }
+
+    const userMembership = currentUser.memberships[0];
+    const role = userMembership?.role || sessionUser.role || "VIEWER";
+
+    if (!hasPermission(role, "users:invite")) {
       return NextResponse.json(
-        { message: "Only Admin or Manager can invite team members." },
+        { message: "Forbidden: Only Owner, Admin, or Manager can invite team members." },
         { status: 403 }
       );
     }
 
-    const workspace = userMembership.workspace;
+    const workspace = userMembership?.workspace;
+    if (!workspace) {
+      return NextResponse.json({ message: "Workspace required" }, { status: 400 });
+    }
+
+    const normalizedInviteEmail = data.email.trim().toLowerCase();
+
+    // Check if user is already a member
+    const existingMemberUser = await db.user.findUnique({
+      where: { email: normalizedInviteEmail },
+      include: { memberships: true },
+    });
+
+    if (existingMemberUser?.memberships.some((m) => m.workspaceId === workspace.id)) {
+      return NextResponse.json(
+        { message: "User is already a member of this workspace." },
+        { status: 400 }
+      );
+    }
+
+    // Prevent duplicate invitations by removing prior active tokens
+    await db.invitationToken.deleteMany({
+      where: {
+        email: normalizedInviteEmail,
+        workspaceId: workspace.id,
+      },
+    });
+
     const inviteTokenStr = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
-    // Save invitation token
     const inviteToken = await db.invitationToken.create({
       data: {
-        email: data.email,
+        email: normalizedInviteEmail,
         workspaceId: workspace.id,
         role: data.role,
         token: inviteTokenStr,
@@ -93,7 +138,7 @@ export async function POST(req: Request) {
 
     // Send HTML Invitation Email
     await sendEmail({
-      to: data.email,
+      to: normalizedInviteEmail,
       subject: `Join ${workspace.name} on LOOP AI Platform`,
       html: getWorkspaceInviteEmailTemplate(currentUser.name || currentUser.email, workspace.name, inviteUrl),
     });
@@ -102,9 +147,9 @@ export async function POST(req: Request) {
       data: {
         workspaceId: workspace.id,
         userId: currentUser.id,
-        action: "MEMBER_INVITED",
+        action: "INVITATION_SENT",
         entityType: "WorkspaceMember",
-        details: `Invited ${data.email} as ${data.role}`,
+        details: `Invited ${normalizedInviteEmail} as ${data.role}`,
       },
     });
 
