@@ -31,7 +31,7 @@ export interface SendEmailResult {
   error?: string;
 }
 
-const DEFAULT_SENDER = process.env.EMAIL_FROM || "CustomerLoop <noreply@customerloop.in>";
+const DEFAULT_SENDER = process.env.EMAIL_FROM || "LOOP AI <team@customerloop.in>";
 
 function getResendClient(): Resend | null {
   const apiKey = process.env.RESEND_API_KEY;
@@ -42,10 +42,10 @@ function getResendClient(): Resend | null {
 }
 
 /**
- * Centralized Enterprise Email Dispatcher using Resend API & Verified Domain (customerloop.in)
+ * Centralized Enterprise Email Dispatcher using Resend API & Verified Domain (team@customerloop.in)
  */
 export async function sendEmail({ to, subject, html, text, from }: SendEmailPayload): Promise<SendEmailResult> {
-  const sender = from || DEFAULT_SENDER;
+  const sender = from || process.env.EMAIL_FROM || DEFAULT_SENDER;
   const resend = getResendClient();
 
   console.log(`✉️ [CustomerLoop Email Service] Dispatching to: ${to} | Subject: "${subject}" | Sender: ${sender}`);
@@ -119,7 +119,7 @@ export async function sendEmail({ to, subject, html, text, from }: SendEmailPayl
   return { success: true, provider: "Console Fallback" };
 }
 
-/* Centralized Helper Service Functions for All 7 Email Scenarios */
+/* Centralized Helper Service Functions for All Email Scenarios */
 
 export async function sendWelcomeEmail(props: WelcomeEmailProps & { to: string }): Promise<SendEmailResult> {
   const { subject, html, text } = renderWelcomeEmail(props);

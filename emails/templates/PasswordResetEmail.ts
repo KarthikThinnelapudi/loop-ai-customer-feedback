@@ -40,7 +40,7 @@ export function renderPasswordResetEmail({
     title: subject,
     previewText,
     contentHtml,
-    securityNotice: "If you did not request a password reset, please ignore this email or contact support@customerloop.in immediately. Your current password remains secure.",
+    securityNotice: "If you did not request a password reset, please ignore this email or contact team@customerloop.in immediately. Your current password remains secure.",
     showUnsubscribe: false,
   });
 

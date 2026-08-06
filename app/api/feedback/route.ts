@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
 import { hasPermission } from "@/lib/rbac";
+import { sendFeedbackConfirmationEmail } from "@/lib/email";
 
 const feedbackIngestSchema = z.object({
   content: z.string().min(5, "Feedback content must be at least 5 characters"),
@@ -147,6 +148,8 @@ export async function POST(req: Request) {
       sentimentLabel = "NEGATIVE";
     }
 
+    const recipientEmail = data.customerEmail || session.user.email;
+
     const newFeedback = await db.feedback.create({
       data: {
         workspaceId,
@@ -164,7 +167,7 @@ export async function POST(req: Request) {
         sentimentLabel,
         status: data.status || "NEW",
         customerName: data.customerName || session.user.name || "Customer",
-        customerEmail: data.customerEmail || session.user.email,
+        customerEmail: recipientEmail,
       },
     });
 
@@ -179,6 +182,20 @@ export async function POST(req: Request) {
         details: `Created new feedback record from ${newFeedback.channel}`,
       },
     });
+
+    // Dispatch Feedback Submission Confirmation Email to Dynamic User/Customer Recipient
+    if (recipientEmail) {
+      try {
+        await sendFeedbackConfirmationEmail({
+          to: recipientEmail,
+          name: newFeedback.customerName || "Valued Customer",
+          feedbackId: newFeedback.id,
+          summary: newFeedback.content,
+        });
+      } catch (emailErr) {
+        console.warn("Non-fatal feedback confirmation email dispatch warning:", emailErr);
+      }
+    }
 
     return NextResponse.json(newFeedback, { status: 201 });
   } catch (error) {
