@@ -31,7 +31,18 @@ export interface SendEmailResult {
   error?: string;
 }
 
-const DEFAULT_SENDER = process.env.EMAIL_FROM || "LOOP AI <team@customerloop.in>";
+export const VERIFIED_DEFAULT_SENDER = "LOOP AI <team@customerloop.in>";
+
+/**
+ * Ensures sender address is verified (team@customerloop.in) and strips legacy resend.dev values
+ */
+export function getSanitizedSender(rawFrom?: string): string {
+  let sender = rawFrom || process.env.EMAIL_FROM || VERIFIED_DEFAULT_SENDER;
+  if (!sender || sender.includes("resend.dev") || sender.includes("your-domain")) {
+    sender = VERIFIED_DEFAULT_SENDER;
+  }
+  return sender;
+}
 
 function getResendClient(): Resend | null {
   const apiKey = process.env.RESEND_API_KEY;
@@ -45,7 +56,7 @@ function getResendClient(): Resend | null {
  * Centralized Enterprise Email Dispatcher using Resend API & Verified Domain (team@customerloop.in)
  */
 export async function sendEmail({ to, subject, html, text, from }: SendEmailPayload): Promise<SendEmailResult> {
-  const sender = from || process.env.EMAIL_FROM || DEFAULT_SENDER;
+  const sender = getSanitizedSender(from);
   const resend = getResendClient();
 
   console.log(`✉️ [CustomerLoop Email Service] Dispatching to: ${to} | Subject: "${subject}" | Sender: ${sender}`);
