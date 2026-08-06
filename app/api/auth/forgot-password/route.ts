@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { sendEmail, getResetPasswordEmailTemplate } from "@/lib/email";
+import { sendPasswordResetEmail } from "@/lib/email";
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -40,13 +40,14 @@ export async function POST(req: Request) {
       },
     });
 
-    const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const baseUrl = process.env.NEXTAUTH_URL || "https://customerloop.in";
     const resetUrl = `${baseUrl}/reset-password?email=${encodeURIComponent(normalizedEmail)}&token=${tokenStr}`;
 
-    await sendEmail({
+    await sendPasswordResetEmail({
       to: normalizedEmail,
-      subject: "Reset your LOOP AI Password",
-      html: getResetPasswordEmailTemplate(user.name || "User", resetUrl),
+      name: user.name || "User",
+      resetUrl,
+      expiresHours: 1,
     });
 
     return NextResponse.json({

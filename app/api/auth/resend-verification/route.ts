@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { sendEmail, getVerificationEmailTemplate } from "@/lib/email";
+import { sendVerificationEmail } from "@/lib/email";
 
 const resendSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -37,13 +37,14 @@ export async function POST(req: Request) {
       },
     });
 
-    const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const baseUrl = process.env.NEXTAUTH_URL || "https://customerloop.in";
     const verifyUrl = `${baseUrl}/verify-email?email=${encodeURIComponent(normalizedEmail)}&token=${tokenStr}`;
 
-    await sendEmail({
+    await sendVerificationEmail({
       to: normalizedEmail,
-      subject: "Verify your LOOP AI Account",
-      html: getVerificationEmailTemplate(user.name || "User", verifyUrl),
+      name: user.name || "User",
+      verifyUrl,
+      expiresHours: 24,
     });
 
     return NextResponse.json({ message: "A new verification email has been sent to your address." });

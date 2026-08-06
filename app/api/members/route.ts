@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
 import { hasPermission } from "@/lib/rbac";
-import { sendEmail, getWorkspaceInviteEmailTemplate } from "@/lib/email";
+import { sendWorkspaceInviteEmail } from "@/lib/email";
 
 const memberInviteSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -133,14 +133,17 @@ export async function POST(req: Request) {
       },
     });
 
-    const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const baseUrl = process.env.NEXTAUTH_URL || "https://customerloop.in";
     const inviteUrl = `${baseUrl}/register?invite=${inviteToken.token}`;
 
-    // Send HTML Invitation Email
-    await sendEmail({
+    // Send Workspace Invitation Email via Resend & customerloop.in
+    await sendWorkspaceInviteEmail({
       to: normalizedInviteEmail,
-      subject: `Join ${workspace.name} on LOOP AI Platform`,
-      html: getWorkspaceInviteEmailTemplate(currentUser.name || currentUser.email, workspace.name, inviteUrl),
+      inviterName: currentUser.name || currentUser.email,
+      workspaceName: workspace.name,
+      role: data.role,
+      inviteUrl,
+      expiresDays: 7,
     });
 
     await db.auditLog.create({
@@ -155,7 +158,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       {
-        message: "Invitation sent successfully.",
+        message: "Invitation sent successfully via Resend API.",
         token: inviteToken.token,
         inviteUrl,
       },

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { sendEmail, getVerificationEmailTemplate } from "@/lib/email";
+import { sendVerificationEmail, sendWelcomeEmail } from "@/lib/email";
 
 const registerSchema = z.object({
   workspaceName: z.string().min(2, "Workspace name must be at least 2 characters"),
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
           name: validatedData.name,
           email: normalizedEmail,
           password: hashedPassword,
-          isVerified: true, // Allow immediate login post-registration
+          isVerified: true, // Immediate login post-registration
           emailVerified: new Date(),
         },
       });
@@ -109,22 +109,30 @@ export async function POST(req: Request) {
       return { workspace, user };
     });
 
-    // Send Welcome & Verification Email
+    // Dispatch Verification Email & Welcome Email via Resend API & customerloop.in
     try {
-      const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+      const baseUrl = process.env.NEXTAUTH_URL || "https://customerloop.in";
       const verifyUrl = `${baseUrl}/verify-email?email=${encodeURIComponent(normalizedEmail)}&token=${tokenStr}`;
-      await sendEmail({
+
+      await sendVerificationEmail({
         to: normalizedEmail,
-        subject: "Welcome to LOOP AI - Account Activated",
-        html: getVerificationEmailTemplate(validatedData.name, verifyUrl),
+        name: validatedData.name,
+        verifyUrl,
+        expiresHours: 24,
+      });
+
+      await sendWelcomeEmail({
+        to: normalizedEmail,
+        name: validatedData.name,
+        dashboardUrl: `${baseUrl}/dashboard`,
       });
     } catch (emailErr) {
-      console.warn("Non-fatal welcome email dispatch warning:", emailErr);
+      console.warn("Non-fatal welcome/verification email dispatch warning:", emailErr);
     }
 
     return NextResponse.json(
       {
-        message: "Account registered successfully! You may now log in.",
+        message: "Account registered successfully! Welcome email sent.",
         workspaceId: result.workspace.id,
         userId: result.user.id,
         requiresVerification: false,

@@ -1,17 +1,85 @@
-interface SendEmailParams {
+import { Resend } from "resend";
+import {
+  renderWelcomeEmail,
+  WelcomeEmailProps,
+  renderVerifyEmail,
+  VerifyEmailProps,
+  renderPasswordResetEmail,
+  PasswordResetEmailProps,
+  renderWorkspaceInviteEmail,
+  WorkspaceInviteEmailProps,
+  renderSupportAutoReplyEmail,
+  SupportAutoReplyEmailProps,
+  renderFeedbackRequestEmail,
+  FeedbackRequestEmailProps,
+  renderFeedbackConfirmationEmail,
+  FeedbackConfirmationEmailProps,
+} from "../emails";
+
+export interface SendEmailPayload {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  from?: string;
 }
 
-export async function sendEmail({ to, subject, html, text }: SendEmailParams) {
-  const isProd = process.env.NODE_ENV === "production";
+export interface SendEmailResult {
+  success: boolean;
+  messageId?: string;
+  provider: "Resend API" | "Console Fallback";
+  error?: string;
+}
+
+const DEFAULT_SENDER = process.env.EMAIL_FROM || "CustomerLoop <noreply@customerloop.in>";
+
+function getResendClient(): Resend | null {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey || apiKey.startsWith("your_") || apiKey.length < 10) {
+    return null;
+  }
+  return new Resend(apiKey);
+}
+
+/**
+ * Centralized Enterprise Email Dispatcher using Resend API & Verified Domain (customerloop.in)
+ */
+export async function sendEmail({ to, subject, html, text, from }: SendEmailPayload): Promise<SendEmailResult> {
+  const sender = from || DEFAULT_SENDER;
+  const resend = getResendClient();
+
+  console.log(`✉️ [CustomerLoop Email Service] Dispatching to: ${to} | Subject: "${subject}" | Sender: ${sender}`);
+
+  if (resend) {
+    try {
+      const response = await resend.emails.send({
+        from: sender,
+        to: [to],
+        subject,
+        html,
+        text: text || subject,
+      });
+
+      if (response.data?.id) {
+        console.log(`✅ Email delivered via Resend API to ${to} (ID: ${response.data.id})`);
+        return {
+          success: true,
+          messageId: response.data.id,
+          provider: "Resend API",
+        };
+      }
+
+      if (response.error) {
+        console.warn(`⚠️ Resend API Dispatch Notice: ${response.error.message}`);
+      }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error(`❌ Resend SDK Dispatch Exception:`, errMsg);
+    }
+  }
+
+  // Native HTTP Fetch Fallback if SDK requires fallback
   const resendApiKey = process.env.RESEND_API_KEY;
-
-  console.log(`✉️ Sending Email to: ${to} | Subject: "${subject}"`);
-
-  // 1. Resend API Integration (Native Fetch)
   if (resendApiKey) {
     try {
       const res = await fetch("https://api.resend.com/emails", {
@@ -21,8 +89,7 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: process.env.EMAIL_FROM || "LOOP AI <onboarding@resend.dev>",
-
+          from: sender,
           to: [to],
           subject,
           html,
@@ -31,57 +98,73 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams) {
       });
 
       if (res.ok) {
-        console.log(`✅ Email sent via Resend API to ${to}`);
-        return { success: true, provider: "Resend API" };
+        const data = await res.json();
+        console.log(`✅ Email delivered via Resend REST API to ${to} (ID: ${data.id})`);
+        return { success: true, messageId: data.id, provider: "Resend API" };
       }
-    } catch (err) {
-      console.error("❌ Resend API Error:", err);
+    } catch (fetchErr) {
+      console.error(`❌ Resend REST API Fetch Error:`, fetchErr);
     }
   }
 
-  // 2. Development / Console Fallback
+  // Development Console Dispatch Logger
   console.log(`--------------------------------------------------`);
-  console.log(`✉️ EMAIL DISPATCH DISPATCHED (${isProd ? "PRODUCTION" : "DEVELOPMENT"})`);
+  console.log(`✉️ EMAIL DISPATCH DISPATCHED (DEVELOPMENT CONSOLE DISPATCH)`);
   console.log(`TO: ${to}`);
+  console.log(`FROM: ${sender}`);
   console.log(`SUBJECT: ${subject}`);
-  console.log(`HTML PAYLOAD LENGTH: ${html.length} chars`);
+  console.log(`HTML SIZE: ${html.length} characters`);
   console.log(`--------------------------------------------------`);
-  return { success: true, provider: "Console Logger" };
+
+  return { success: true, provider: "Console Fallback" };
 }
 
-/* Email HTML Template Generators */
+/* Centralized Helper Service Functions for All 7 Email Scenarios */
 
-export function getVerificationEmailTemplate(name: string, verifyUrl: string) {
-  return `
-    <div style="font-family: Arial, sans-serif; background-color: #090d16; color: #ffffff; padding: 30px; border-radius: 12px;">
-      <h2 style="color: #10b981;">Verify your LOOP AI Account</h2>
-      <p>Hi ${name || "there"},</p>
-      <p>Welcome to LOOP AI Customer Feedback Intelligence. Please click the button below to verify your email address and activate your account:</p>
-      <a href="${verifyUrl}" style="display: inline-block; background-color: #10b981; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0;">Verify Email Address</a>
-      <p style="color: #94a3b8; font-size: 12px;">If you didn't create a LOOP AI account, you can safely ignore this email.</p>
-    </div>
-  `;
+export async function sendWelcomeEmail(props: WelcomeEmailProps & { to: string }): Promise<SendEmailResult> {
+  const { subject, html, text } = renderWelcomeEmail(props);
+  return sendEmail({ to: props.to, subject, html, text });
 }
 
-export function getResetPasswordEmailTemplate(name: string, resetUrl: string) {
-  return `
-    <div style="font-family: Arial, sans-serif; background-color: #090d16; color: #ffffff; padding: 30px; border-radius: 12px;">
-      <h2 style="color: #10b981;">Reset Your Password</h2>
-      <p>Hi ${name || "there"},</p>
-      <p>We received a request to reset your password for your LOOP AI account. Click the button below to set a new password:</p>
-      <a href="${resetUrl}" style="display: inline-block; background-color: #06b6d4; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0;">Reset Password</a>
-      <p style="color: #94a3b8; font-size: 12px;">This link is valid for 1 hour. If you didn't request a password reset, please secure your account immediately.</p>
-    </div>
-  `;
+export async function sendVerificationEmail(props: VerifyEmailProps & { to: string }): Promise<SendEmailResult> {
+  const { subject, html, text } = renderVerifyEmail(props);
+  return sendEmail({ to: props.to, subject, html, text });
 }
 
-export function getWorkspaceInviteEmailTemplate(inviterName: string, workspaceName: string, inviteUrl: string) {
-  return `
-    <div style="font-family: Arial, sans-serif; background-color: #090d16; color: #ffffff; padding: 30px; border-radius: 12px;">
-      <h2 style="color: #10b981;">Workspace Invitation</h2>
-      <p>${inviterName} has invited you to join the <strong>${workspaceName}</strong> workspace on LOOP AI.</p>
-      <p>Click below to accept your invitation and join the workspace:</p>
-      <a href="${inviteUrl}" style="display: inline-block; background-color: #10b981; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0;">Accept Invitation</a>
-    </div>
-  `;
+export async function sendPasswordResetEmail(props: PasswordResetEmailProps & { to: string }): Promise<SendEmailResult> {
+  const { subject, html, text } = renderPasswordResetEmail(props);
+  return sendEmail({ to: props.to, subject, html, text });
+}
+
+export async function sendWorkspaceInviteEmail(props: WorkspaceInviteEmailProps & { to: string }): Promise<SendEmailResult> {
+  const { subject, html, text } = renderWorkspaceInviteEmail(props);
+  return sendEmail({ to: props.to, subject, html, text });
+}
+
+export async function sendSupportAutoReplyEmail(props: SupportAutoReplyEmailProps & { to: string }): Promise<SendEmailResult> {
+  const { subject, html, text } = renderSupportAutoReplyEmail(props);
+  return sendEmail({ to: props.to, subject, html, text });
+}
+
+export async function sendFeedbackRequestEmail(props: FeedbackRequestEmailProps & { to: string }): Promise<SendEmailResult> {
+  const { subject, html, text } = renderFeedbackRequestEmail(props);
+  return sendEmail({ to: props.to, subject, html, text });
+}
+
+export async function sendFeedbackConfirmationEmail(props: FeedbackConfirmationEmailProps & { to: string }): Promise<SendEmailResult> {
+  const { subject, html, text } = renderFeedbackConfirmationEmail(props);
+  return sendEmail({ to: props.to, subject, html, text });
+}
+
+/* Backward Compatibility Legacy Helper Exports */
+export function getVerificationEmailTemplate(name: string, verifyUrl: string): string {
+  return renderVerifyEmail({ name, verifyUrl }).html;
+}
+
+export function getResetPasswordEmailTemplate(name: string, resetUrl: string): string {
+  return renderPasswordResetEmail({ name, resetUrl }).html;
+}
+
+export function getWorkspaceInviteEmailTemplate(inviterName: string, workspaceName: string, inviteUrl: string): string {
+  return renderWorkspaceInviteEmail({ inviterName, workspaceName, role: "MEMBER", inviteUrl }).html;
 }
