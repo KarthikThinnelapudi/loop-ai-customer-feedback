@@ -8,16 +8,25 @@ import { retrieveAndRankEvidence, generateGroundedAnswer } from "@/lib/rag";
 
 const streamRequestSchema = z.object({
   prompt: z.string().min(1, "Prompt is required"),
-  sessionId: z.string().optional(),
-  model: z.string().optional().default("Auto"),
-  history: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })).optional().default([]),
+  sessionId: z.string().nullable().optional(),
+  model: z.string().nullable().optional().default("Auto"),
+  history: z
+    .array(
+      z.object({
+        role: z.string().transform((r) => (r === "ai" ? "assistant" : r)),
+        content: z.string().default(""),
+      })
+    )
+    .nullable()
+    .optional()
+    .default([]),
 });
 
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ message: "Unauthorized: Active user session required." }, { status: 401 });
     }
 
     const currentUser = await db.user.findUnique({
@@ -30,15 +39,35 @@ export async function POST(req: Request) {
     const workspaceId = userMembership?.workspaceId;
 
     if (!workspaceId || !currentUser) {
-      return NextResponse.json({ message: "Workspace membership required" }, { status: 403 });
+      return NextResponse.json({ message: "Workspace membership required." }, { status: 403 });
     }
 
     if (!hasPermission(role, "ask_ai:access")) {
       return NextResponse.json({ message: "Forbidden: Viewer role cannot access LOOP AI." }, { status: 403 });
     }
 
-    const body = await req.json();
-    const { prompt, sessionId, history } = streamRequestSchema.parse(body);
+    const rawBody = await req.json().catch(() => null);
+    if (!rawBody) {
+      return NextResponse.json({ message: "Invalid JSON payload provided." }, { status: 400 });
+    }
+
+    console.log("📥 [/api/ai/stream] Received Request Body:", JSON.stringify(rawBody));
+
+    const parseResult = streamRequestSchema.safeParse(rawBody);
+    if (!parseResult.success) {
+      const details = parseResult.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
+      console.warn("⚠️ [/api/ai/stream] Validation Error Details:", details);
+      return NextResponse.json(
+        { message: `Validation Error: ${details}`, issues: parseResult.error.issues },
+        { status: 400 }
+      );
+    }
+
+    const { prompt, sessionId, history: rawHistory } = parseResult.data;
+    const history = (rawHistory || []).map((h) => ({
+      role: h.role === "user" ? ("user" as const) : ("assistant" as const),
+      content: h.content,
+    }));
 
     // Fetch workspace feedback evidence
     const feedbackItems = await db.feedback.findMany({
@@ -91,25 +120,28 @@ export async function POST(req: Request) {
         },
       });
 
-      // Save user & assistant messages to persistent session if sessionId provided
+      // Save user & assistant messages to persistent session if valid sessionId provided
       if (sessionId) {
-        await db.chatMessage.createMany({
-          data: [
-            { sessionId, role: "user", content: prompt },
-            {
-              sessionId,
-              role: "assistant",
-              content: ragResult.answer,
-              citations: JSON.parse(JSON.stringify(ragResult.citations)),
-              metrics: JSON.parse(JSON.stringify(ragResult.metrics)),
-            },
-          ],
-        });
+        const sessionExists = await db.chatSession.findFirst({ where: { id: sessionId, workspaceId } });
+        if (sessionExists) {
+          await db.chatMessage.createMany({
+            data: [
+              { sessionId, role: "user", content: prompt },
+              {
+                sessionId,
+                role: "assistant",
+                content: ragResult.answer,
+                citations: JSON.parse(JSON.stringify(ragResult.citations)),
+                metrics: JSON.parse(JSON.stringify(ragResult.metrics)),
+              },
+            ],
+          });
 
-        await db.chatSession.update({
-          where: { id: sessionId },
-          data: { updatedAt: new Date() },
-        });
+          await db.chatSession.update({
+            where: { id: sessionId },
+            data: { updatedAt: new Date() },
+          });
+        }
       }
     } catch (persistErr) {
       console.warn("AI Stream persistence warning:", persistErr);
@@ -146,6 +178,7 @@ export async function POST(req: Request) {
     });
 
     return new Response(stream, {
+      status: 200,
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache, no-transform",
@@ -153,9 +186,6 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: error.issues[0]?.message }, { status: 400 });
-    }
     console.error("AI Stream Error:", error);
     return NextResponse.json({ message: "Internal server error during streaming." }, { status: 500 });
   }
