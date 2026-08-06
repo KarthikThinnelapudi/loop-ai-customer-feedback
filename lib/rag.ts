@@ -81,6 +81,17 @@ const queryCache = new Map<string, { result: GroundedRAGResult; timestamp: numbe
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
+ * Enterprise PII Masking Tool (SSNs, Card Numbers, Email Addresses, Phone Numbers)
+ */
+export function maskPII(text: string): string {
+  return text
+    .replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[SSN MASKED]")
+    .replace(/\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/g, "[CARD MASKED]")
+    .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, "[EMAIL MASKED]")
+    .replace(/\b\+?\d{1,3}?[-. ]?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4}\b/g, "[PHONE MASKED]");
+}
+
+/**
  * Sanitizes input prompt against prompt injection and malicious override attempts
  */
 export function sanitizePrompt(prompt: string): string {
@@ -100,7 +111,7 @@ export function sanitizePrompt(prompt: string): string {
     cleaned = cleaned.replace(pattern, "");
   }
 
-  return cleaned;
+  return maskPII(cleaned);
 }
 
 /**
@@ -212,8 +223,25 @@ export function detectIntent(prompt: string): IntentType {
   return "SUMMARY";
 }
 
+function getDynamicWeights(intent: IntentType): { relW: number; recW: number; sentW: number } {
+  switch (intent) {
+    case "EXECUTIVE_REPORT":
+      return { relW: 0.3, recW: 0.5, sentW: 0.2 };
+    case "ROOT_CAUSE_ANALYSIS":
+      return { relW: 0.5, recW: 0.2, sentW: 0.3 };
+    case "TREND_ANALYSIS":
+      return { relW: 0.2, recW: 0.6, sentW: 0.2 };
+    case "CUSTOMER_COMPLAINTS":
+      return { relW: 0.3, recW: 0.2, sentW: 0.5 };
+    case "SENTIMENT_ANALYSIS":
+      return { relW: 0.2, recW: 0.3, sentW: 0.5 };
+    default:
+      return { relW: 0.5, recW: 0.3, sentW: 0.2 };
+  }
+}
+
 /**
- * Enterprise Hybrid Retrieval with Reciprocal Rank Fusion (RRF) & Multi-Factor Reranking
+ * Enterprise Hybrid Retrieval with Reciprocal Rank Fusion (RRF) & Dynamic Cross-Encoder Reranking
  */
 export function retrieveAndRankEvidence(
   rawPrompt: string,
@@ -255,7 +283,6 @@ export function retrieveAndRankEvidence(
 
   const retrievalEndTime = Date.now();
 
-  // Global synthesis applies to EXECUTIVE_REPORT or general query without specific entity keywords
   const isGlobalSynthesis =
     intent === "EXECUTIVE_REPORT" ||
     ((intent === "SUMMARY" || intent === "SENTIMENT_ANALYSIS" || intent === "TREND_ANALYSIS") &&
@@ -290,7 +317,9 @@ export function retrieveAndRankEvidence(
     scoredMap.set(item.id, { item, rrf, relevance, matches });
   });
 
-  // 4. Cross-Encoder Multi-Factor Reranking (Relevance + Recency + Sentiment)
+  // 4. Dynamic Cross-Encoder Multi-Factor Reranking
+  const weights = getDynamicWeights(intent);
+
   const ranked: RankedEvidence[] = uniqueItems.map((item) => {
     const data = scoredMap.get(item.id)!;
 
@@ -301,10 +330,9 @@ export function retrieveAndRankEvidence(
 
     const sentimentWeight = Math.abs(item.sentimentScore || 0);
 
-    // If global synthesis or matched keywords, calculate composite score
     const finalScore = (!isGlobalSynthesis && keywords.length > 0 && data.matches === 0)
       ? 0
-      : (data.relevance * 0.5 + recencyWeight * 0.3 + sentimentWeight * 0.2 + data.rrf * 10);
+      : (data.relevance * weights.relW + recencyWeight * weights.recW + sentimentWeight * weights.sentW + data.rrf * 10);
 
     return {
       item,
@@ -345,7 +373,6 @@ export async function generateGroundedAnswer(
   const genStartTime = Date.now();
   const prompt = sanitizePrompt(rawPrompt);
 
-  // Cache Lookup
   const cacheKey = `${workspaceId}:${prompt.toLowerCase().trim()}:${intent}`;
   const cachedEntry = queryCache.get(cacheKey);
   if (cachedEntry && Date.now() - cachedEntry.timestamp < CACHE_TTL_MS) {
@@ -358,7 +385,6 @@ export async function generateGroundedAnswer(
     };
   }
 
-  // Strict Grounding Rule: If evidence is insufficient, explicitly state exact string
   if (!evidence || evidence.length === 0) {
     const totalLatency = (retrievalMetrics?.retrievalLatencyMs || 0) + (retrievalMetrics?.rerankingLatencyMs || 0) + (Date.now() - genStartTime);
     const result: GroundedRAGResult = {
@@ -392,8 +418,8 @@ export async function generateGroundedAnswer(
 
   const citations = evidence.map((e) => ({
     id: e.item.id,
-    customer: e.item.customerName || e.item.company || "Verified Customer",
-    quote: e.item.content,
+    customer: maskPII(e.item.customerName || e.item.company || "Verified Customer"),
+    quote: maskPII(e.item.content),
     channel: e.item.channel || "Support Ticket",
     sentimentScore: e.item.sentimentScore || 0,
     sentimentLabel: e.item.sentimentLabel || "NEUTRAL",
@@ -401,7 +427,6 @@ export async function generateGroundedAnswer(
 
   const groundedScore = Number((Math.min(0.98, 0.65 + totalItems * 0.05)).toFixed(2));
 
-  // Construct System Prompt for AI Gateway / Gemini / Fallback LLMs
   const systemPrompt = `You are Ask LOOP AI, an enterprise-grade Customer Feedback Intelligence assistant.
 You analyze customer evidence with strict zero-hallucination policy.
 Never invent quotes, features, or metrics not grounded in the provided customer feedback items.
@@ -413,7 +438,7 @@ ANALYZED EVIDENCE (${totalItems} items):
 ${citations.map((c, i) => `[Citation ${i + 1}] (${c.customer} via ${c.channel}): "${c.quote}"`).join("\n")}
 
 CONVERSATION HISTORY (${history.length} turns):
-${history.map((h) => `${h.role.toUpperCase()}: ${h.content}`).join("\n")}
+${history.map((h) => `${h.role.toUpperCase()}: ${maskPII(h.content)}`).join("\n")}
 
 Synthesize a comprehensive, executive-grade analysis based strictly on the grounded evidence above.`;
 
@@ -424,7 +449,6 @@ Synthesize a comprehensive, executive-grade analysis based strictly on the groun
   let estimatedCostUsd = 0.00064;
 
   try {
-    // Route request through Centralized Multi-Provider AI Gateway (Gemini -> OpenRouter -> NVIDIA -> OmniRoute)
     const gatewayRes = await generateAIGatewayResponse({
       systemPrompt,
       userPrompt: userContextPrompt,
@@ -440,7 +464,6 @@ Synthesize a comprehensive, executive-grade analysis based strictly on the groun
   } catch (gatewayErr) {
     console.warn("AI Gateway fallback to in-memory synthesis engine:", gatewayErr);
 
-    // Fallback Grounded Synthesis Format (if external LLM API calls fail or offline)
     if (intent === "EXECUTIVE_REPORT") {
       answerText = `# Executive Summary
 Customer sentiment analysis across indexed feedback items indicates an overall net sentiment score of ${positiveRatio}% positive (${positiveCount} positive, ${negativeCount} negative, ${neutralCount} neutral). Key operational insights reveal critical focus areas across onboarding efficiency, system performance, and enterprise integration capabilities.

@@ -54,6 +54,8 @@ model User {
   sessions        Session[]
   accounts        Account[]
   auditLogs       AuditLog[]
+  chatSessions    ChatSession[]
+  gatewayMetrics  AiGatewayMetric[]
 }
 
 model Workspace {
@@ -68,13 +70,16 @@ model Workspace {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
-  members     WorkspaceMember[]
-  feedback    Feedback[]
-  themes      FeedbackTheme[]
-  reports     Report[]
-  shareLinks  ShareLink[]
-  auditLogs   AuditLog[]
-  invitations InvitationToken[]
+  members        WorkspaceMember[]
+  feedback       Feedback[]
+  themes         FeedbackTheme[]
+  reports        Report[]
+  shareLinks     ShareLink[]
+  auditLogs      AuditLog[]
+  invitations    InvitationToken[]
+  chatSessions   ChatSession[]
+  documents      DocumentFile[]
+  gatewayMetrics AiGatewayMetric[]
 }
 
 model WorkspaceMember {
@@ -251,4 +256,78 @@ model VerificationToken {
   expires    DateTime
 
   @@id([identifier, token])
+}
+
+model ChatSession {
+  id          String        @id @default(uuid())
+  workspaceId String
+  userId      String
+  title       String        @default("New Conversation")
+  isPinned    Boolean       @default(false)
+  isShared    Boolean       @default(false)
+  model       String        @default("Auto")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  messages    ChatMessage[]
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, userId])
+}
+
+model ChatMessage {
+  id        String      @id @default(uuid())
+  sessionId String
+  role      String
+  content   String      @db.Text
+  citations Json?
+  metrics   Json?
+  createdAt DateTime    @default(now())
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model DocumentFile {
+  id          String          @id @default(uuid())
+  workspaceId String
+  fileName    String
+  fileType    String
+  fileSize    Int
+  chunkCount  Int             @default(0)
+  createdAt   DateTime        @default(now())
+  chunks      DocumentChunk[]
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model DocumentChunk {
+  id         String       @id @default(uuid())
+  documentId String
+  chunkIndex Int
+  content    String       @db.Text
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+  document   DocumentFile @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+}
+
+model AiGatewayMetric {
+  id               String    @id @default(uuid())
+  workspaceId      String
+  userId           String?
+  provider         String
+  model            String
+  promptTokens     Int
+  completionTokens Int
+  latencyMs        Int
+  costUsd          Float
+  fallbackOccurred Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user             User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
 }
