@@ -6,7 +6,7 @@ import { z } from "zod";
 import { hasPermission } from "@/lib/rbac";
 
 const csvRowSchema = z.object({
-  content: z.string().min(5, "Feedback quote must be at least 5 characters"),
+  content: z.string().min(3, "Feedback quote must be at least 3 characters"),
   channel: z.enum(["SUPPORT_TICKET", "APP_STORE_REVIEW", "NPS_SURVEY", "SALES_CALL_NOTE", "COMMUNITY_POST"]).optional(),
   customerName: z.string().optional(),
   customerEmail: z.string().optional(),
@@ -37,7 +37,6 @@ export async function POST(req: Request) {
     }
 
     const userMembership = currentUser.memberships[0];
-
     const role = userMembership?.role || "VIEWER";
     const workspaceId = userMembership?.workspaceId;
 
@@ -55,67 +54,110 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { items } = bulkImportSchema.parse(body);
 
-    let importedCount = 0;
+    // Fetch existing feedback contents to detect duplicates efficiently
+    const existingFeedback = await db.feedback.findMany({
+      where: {
+        workspaceId,
+        deletedAt: null,
+      },
+      select: { content: true },
+    });
+
+    const existingContentSet = new Set(existingFeedback.map((f) => f.content.trim().toLowerCase()));
+
+    const newRowsToInsert: Array<{
+      workspaceId: string;
+      authorId: string;
+      content: string;
+      channel: "SUPPORT_TICKET" | "APP_STORE_REVIEW" | "NPS_SURVEY" | "SALES_CALL_NOTE" | "COMMUNITY_POST";
+      company: string;
+      category: string;
+      priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+      rating: number;
+      sentimentScore: number;
+      sentimentLabel: string;
+      status: "NEW";
+      customerName: string;
+      customerEmail: string;
+    }> = [];
+
     let duplicateCount = 0;
-    let failedCount = 0;
 
     for (const item of items) {
-      try {
-        const existing = await db.feedback.findFirst({
-          where: {
-            workspaceId,
-            content: item.content,
-            deletedAt: null,
-          },
-        });
+      const trimmedContent = item.content.trim();
+      const contentLower = trimmedContent.toLowerCase();
 
-        if (existing) {
-          duplicateCount++;
-          continue;
-        }
-
-        let sentimentScore = 0.0;
-        let sentimentLabel = "NEUTRAL";
-        const lower = item.content.toLowerCase();
-        if (lower.includes("great") || lower.includes("love") || lower.includes("fast") || lower.includes("awesome") || lower.includes("smooth")) {
-          sentimentScore = 0.85;
-          sentimentLabel = "POSITIVE";
-        } else if (lower.includes("error") || lower.includes("bug") || lower.includes("slow") || lower.includes("latency") || lower.includes("fail")) {
-          sentimentScore = -0.75;
-          sentimentLabel = "NEGATIVE";
-        }
-
-        await db.feedback.create({
-          data: {
-            workspaceId,
-            authorId: currentUser.id,
-            content: item.content,
-            channel: item.channel || "SUPPORT_TICKET",
-            company: item.company || "Enterprise Account",
-            category: item.category || "General",
-            priority: item.priority || "MEDIUM",
-            rating: item.rating || 5,
-            sentimentScore,
-            sentimentLabel,
-            status: "NEW",
-            customerName: item.customerName || "CSV Customer",
-            customerEmail: item.customerEmail || "customer@external.com",
-          },
-        });
-        importedCount++;
-      } catch (rowErr) {
-        console.error("Row Ingestion Error:", rowErr);
-        failedCount++;
+      if (existingContentSet.has(contentLower)) {
+        duplicateCount++;
+        continue;
       }
+
+      existingContentSet.add(contentLower);
+
+      let sentimentScore = 0.0;
+      let sentimentLabel = "NEUTRAL";
+      if (
+        contentLower.includes("great") ||
+        contentLower.includes("love") ||
+        contentLower.includes("fast") ||
+        contentLower.includes("awesome") ||
+        contentLower.includes("smooth") ||
+        contentLower.includes("excellent") ||
+        contentLower.includes("happy")
+      ) {
+        sentimentScore = 0.85;
+        sentimentLabel = "POSITIVE";
+      } else if (
+        contentLower.includes("error") ||
+        contentLower.includes("bug") ||
+        contentLower.includes("slow") ||
+        contentLower.includes("latency") ||
+        contentLower.includes("fail") ||
+        contentLower.includes("broken") ||
+        contentLower.includes("bad")
+      ) {
+        sentimentScore = -0.75;
+        sentimentLabel = "NEGATIVE";
+      }
+
+      newRowsToInsert.push({
+        workspaceId,
+        authorId: currentUser.id,
+        content: trimmedContent,
+        channel: item.channel || "SUPPORT_TICKET",
+        company: item.company || "Enterprise Account",
+        category: item.category || "General",
+        priority: item.priority || "MEDIUM",
+        rating: item.rating || 5,
+        sentimentScore,
+        sentimentLabel,
+        status: "NEW",
+        customerName: item.customerName || "CSV Customer",
+        customerEmail: item.customerEmail || "customer@external.com",
+      });
     }
 
+    // Chunked Batch Insert to prevent memory spikes
+    const CHUNK_SIZE = 100;
+    let importedCount = 0;
+
+    for (let i = 0; i < newRowsToInsert.length; i += CHUNK_SIZE) {
+      const chunk = newRowsToInsert.slice(i, i + CHUNK_SIZE);
+      await db.feedback.createMany({
+        data: chunk,
+        skipDuplicates: true,
+      });
+      importedCount += chunk.length;
+    }
+
+    // Log Audit Event
     await db.auditLog.create({
       data: {
         workspaceId,
         userId: currentUser.id,
         action: "FEEDBACK_CSV_IMPORTED",
         entityType: "Feedback",
-        details: `Imported ${importedCount} items (${duplicateCount} duplicates skipped, ${failedCount} failed)`,
+        details: `Batch imported ${importedCount} feedback records (${duplicateCount} duplicates skipped)`,
       },
     });
 
@@ -123,7 +165,6 @@ export async function POST(req: Request) {
       message: `CSV import completed successfully.`,
       importedCount,
       duplicateCount,
-      failedCount,
       totalProcessed: items.length,
     });
   } catch (error) {
