@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -19,6 +19,7 @@ import {
   Bot,
   Users,
 } from "lucide-react";
+import { useDismissablePanel } from "@/hooks/useDismissablePanel";
 
 interface NotificationItem {
   id: string;
@@ -74,63 +75,69 @@ export default function Topbar({
   onOpenNewFeedback?: () => void;
 }) {
   const router = useRouter();
-  const [showSearch, setShowSearch] = useState(false);
-  const [showNotifs, setShowNotifs] = useState(false);
+  const {
+    openPanel,
+    closeAll,
+    searchInputRef,
+    isSearchOpen,
+    isNotifOpen,
+    isProfileOpen,
+  } = useDismissablePanel();
+
   const [notifications, setNotifications] = useState<NotificationItem[]>(mockNotifications);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const notifRef = useRef<HTMLDivElement>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number>(-1);
 
-  // Keyboard Cmd+K shortcut to open, and ESC to close modals
+  // Keyboard Cmd+K shortcut to toggle search panel
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setShowSearch((prev) => !prev);
-      }
-      if (e.key === "Escape") {
-        setShowSearch(false);
-        setShowNotifs(false);
+        openPanel("search");
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [openPanel]);
 
-  // Click outside to close notifications dropdown
+  // Arrow Key Navigation & Enter Key trigger inside Search Panel
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
-        setShowNotifs(false);
+    if (!isSearchOpen) {
+      setSelectedIndex(-1);
+      return;
+    }
+
+    const handleSearchKeys = (e: KeyboardEvent) => {
+      if (searchResults.length === 0) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev < searchResults.length - 1 ? prev + 1 : 0));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : searchResults.length - 1));
+      } else if (e.key === "Enter" && selectedIndex >= 0 && selectedIndex < searchResults.length) {
+        e.preventDefault();
+        const target = searchResults[selectedIndex];
+        if (target) {
+          handleResultClick(target.targetUrl);
+        }
       }
     };
-    if (showNotifs) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showNotifs]);
 
-  // Lock body scroll when search modal is active
-  useEffect(() => {
-    if (showSearch) {
-      document.body.style.overflow = "hidden";
-      setTimeout(() => searchInputRef.current?.focus(), 50);
-    } else {
-      document.body.style.overflow = "auto";
-    }
-    return () => {
-      document.body.style.overflow = "auto";
-    };
-  }, [showSearch]);
+    window.addEventListener("keydown", handleSearchKeys);
+    return () => window.removeEventListener("keydown", handleSearchKeys);
+  }, [isSearchOpen, searchResults, selectedIndex]);
 
   // Debounced Global Search API Query
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) {
       setSearchResults([]);
       setSearchLoading(false);
+      setSelectedIndex(-1);
       return;
     }
 
@@ -141,6 +148,7 @@ export default function Topbar({
         if (res.ok) {
           const data = await res.json();
           setSearchResults(data);
+          setSelectedIndex(-1);
         }
       } catch (err) {
         console.warn("Global Search error:", err);
@@ -159,7 +167,7 @@ export default function Topbar({
   };
 
   const handleResultClick = (targetUrl: string) => {
-    setShowSearch(false);
+    closeAll();
     setSearchQuery("");
     router.push(targetUrl);
   };
@@ -183,11 +191,16 @@ export default function Topbar({
 
   return (
     <header className="h-20 border-b border-slate-800/80 bg-slate-950/60 backdrop-blur-xl px-6 md:px-8 flex items-center justify-between sticky top-0 z-20">
-      {/* Search trigger */}
+      {/* Search Trigger Button */}
       <div className="flex items-center gap-4">
         <button
-          onClick={() => setShowSearch(true)}
-          className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700 transition w-56 sm:w-72 md:w-80"
+          onClick={() => openPanel("search")}
+          aria-label="Search workspace"
+          className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border text-slate-400 transition w-56 sm:w-72 md:w-80 ${
+            isSearchOpen
+              ? "bg-slate-900 border-emerald-500 text-white ring-2 ring-emerald-500/20"
+              : "bg-slate-900/80 border-slate-800 hover:text-slate-200 hover:border-slate-700"
+          }`}
         >
           <Search className="w-4 h-4 text-slate-500" />
           <span className="text-sm font-normal truncate">Search quotes, themes, reports...</span>
@@ -217,11 +230,15 @@ export default function Topbar({
         <div className="h-6 w-px bg-slate-800 hidden sm:block" />
 
         {/* Notifications Popover */}
-        <div className="relative" ref={notifRef}>
+        <div className="relative">
           <button
-            onClick={() => setShowNotifs(!showNotifs)}
+            onClick={() => openPanel("notif")}
             aria-label="Notifications"
-            className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition relative"
+            className={`p-2.5 rounded-xl border transition relative ${
+              isNotifOpen
+                ? "bg-slate-900 border-emerald-500 text-white ring-2 ring-emerald-500/20"
+                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+            }`}
           >
             <Bell className="w-4 h-4" />
             {unreadCount > 0 && (
@@ -229,96 +246,132 @@ export default function Topbar({
             )}
           </button>
 
-          {/* Notifications Dropdown */}
-          {showNotifs && (
-            <div className="absolute right-0 mt-3 w-80 sm:w-96 rounded-2xl border border-slate-800 bg-slate-900/95 backdrop-blur-2xl p-4 shadow-2xl z-50 space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <Bell className="w-4 h-4 text-emerald-400" />
-                  <h3 className="text-sm font-bold text-white">Notifications</h3>
-                  {unreadCount > 0 && (
-                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono font-bold">
-                      {unreadCount} New
-                    </span>
-                  )}
-                </div>
+          {/* Notifications Dropdown Panel */}
+          {isNotifOpen && (
+            <>
+              {/* Click outside backdrop */}
+              <div className="fixed inset-0 z-40" onClick={closeAll} />
 
-                <div className="flex items-center gap-2">
-                  {unreadCount > 0 && (
-                    <button
-                      onClick={markAllRead}
-                      className="text-[11px] text-emerald-400 hover:underline font-semibold"
-                    >
-                      Mark all read
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setShowNotifs(false)}
-                    className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                {notifications.length === 0 ? (
-                  <div className="p-8 text-center space-y-2">
-                    <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
-                      <Check className="w-5 h-5" />
-                    </div>
-                    <p className="text-xs font-bold text-white">You&apos;re all caught up!</p>
-                    <p className="text-[11px] text-slate-400">No new notifications in your workspace.</p>
+              <div className="absolute right-0 mt-3 w-80 sm:w-96 rounded-2xl border border-slate-800 bg-slate-900/95 backdrop-blur-2xl p-4 shadow-2xl z-50 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-emerald-400" />
+                    <h3 className="text-sm font-bold text-white">Notifications</h3>
+                    {unreadCount > 0 && (
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono font-bold">
+                        {unreadCount} New
+                      </span>
+                    )}
                   </div>
-                ) : (
-                  notifications.map((n) => (
-                    <div
-                      key={n.id}
-                      onClick={() => {
-                        if (n.link) {
-                          setShowNotifs(false);
-                          router.push(n.link);
-                        }
-                      }}
-                      className={`p-3 rounded-xl border text-xs space-y-1 transition cursor-pointer ${
-                        !n.read
-                          ? "bg-slate-950 border-emerald-500/30 hover:border-emerald-500/60"
-                          : "bg-slate-950/50 border-slate-800/80 opacity-70 hover:opacity-100"
-                      }`}
+
+                  <div className="flex items-center gap-2">
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={markAllRead}
+                        className="text-[11px] text-emerald-400 hover:underline font-semibold"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                    <button
+                      onClick={closeAll}
+                      className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-200">{n.title}</span>
-                        <span className="text-[10px] text-slate-500 font-mono">{n.time}</span>
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                  {notifications.length === 0 ? (
+                    <div className="p-8 text-center space-y-2">
+                      <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
+                        <Check className="w-5 h-5" />
                       </div>
-                      <p className="text-[11px] text-slate-400">{n.description}</p>
+                      <p className="text-xs font-bold text-white">You&apos;re all caught up!</p>
+                      <p className="text-[11px] text-slate-400">No new notifications in your workspace.</p>
                     </div>
-                  ))
-                )}
+                  ) : (
+                    notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        onClick={() => {
+                          if (n.link) {
+                            closeAll();
+                            router.push(n.link);
+                          }
+                        }}
+                        className={`p-3 rounded-xl border text-xs space-y-1 transition cursor-pointer ${
+                          !n.read
+                            ? "bg-slate-950 border-emerald-500/30 hover:border-emerald-500/60"
+                            : "bg-slate-950/50 border-slate-800/80 opacity-70 hover:opacity-100"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-200">{n.title}</span>
+                          <span className="text-[10px] text-slate-500 font-mono">{n.time}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">{n.description}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
 
-        {/* User Badge */}
-        <Link
-          href="/profile"
-          className="flex items-center gap-2 p-1.5 pl-3 rounded-full bg-slate-900 border border-slate-800 hover:border-slate-700 transition"
-        >
-          <div className="flex items-center gap-1.5">
-            <Shield className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-xs font-semibold text-slate-200 hidden sm:inline">Admin</span>
-          </div>
-          <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center justify-center text-xs font-bold">
-            <User className="w-3.5 h-3.5" />
-          </div>
-        </Link>
+        {/* User Badge / Profile Menu */}
+        <div className="relative">
+          <button
+            onClick={() => openPanel("profile")}
+            className="flex items-center gap-2 p-1.5 pl-3 rounded-full bg-slate-900 border border-slate-800 hover:border-slate-700 transition"
+          >
+            <div className="flex items-center gap-1.5">
+              <Shield className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-xs font-semibold text-slate-200 hidden sm:inline">Admin</span>
+            </div>
+            <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center justify-center text-xs font-bold">
+              <User className="w-3.5 h-3.5" />
+            </div>
+          </button>
+
+          {isProfileOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={closeAll} />
+              <div className="absolute right-0 mt-3 w-56 rounded-2xl border border-slate-800 bg-slate-900/95 backdrop-blur-2xl p-2 shadow-2xl z-50 text-xs space-y-1">
+                <Link
+                  href="/profile"
+                  onClick={closeAll}
+                  className="block px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                >
+                  My Profile
+                </Link>
+                <Link
+                  href="/settings"
+                  onClick={closeAll}
+                  className="block px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                >
+                  Workspace Settings
+                </Link>
+                <Link
+                  href="/settings/team"
+                  onClick={closeAll}
+                  className="block px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                >
+                  Team & RBAC
+                </Link>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Global Command Palette Modal */}
-      {showSearch && (
+      {isSearchOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-start justify-center pt-20 px-4"
-          onClick={() => setShowSearch(false)}
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-start justify-center pt-20 px-4 transition-opacity duration-200"
+          onClick={closeAll}
         >
           <div
             className="w-full max-w-2xl rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-2xl space-y-4 relative"
@@ -335,8 +388,8 @@ export default function Topbar({
                 className="w-full bg-transparent text-white placeholder-slate-500 text-base focus:outline-none"
               />
               <button
-                onClick={() => setShowSearch(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800"
+                onClick={closeAll}
+                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800 transition"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -346,11 +399,15 @@ export default function Topbar({
               {searchLoading ? (
                 <p className="text-xs text-slate-500 italic p-3 text-center">Searching workspace items...</p>
               ) : searchResults.length > 0 ? (
-                searchResults.map((item) => (
+                searchResults.map((item, idx) => (
                   <div
                     key={item.id}
                     onClick={() => handleResultClick(item.targetUrl)}
-                    className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-emerald-500/50 cursor-pointer transition text-xs space-y-1 flex items-center gap-3 group"
+                    className={`p-3 rounded-xl border cursor-pointer transition text-xs space-y-1 flex items-center gap-3 group ${
+                      selectedIndex === idx
+                        ? "bg-slate-800 border-emerald-500 text-white shadow-md"
+                        : "bg-slate-950 border-slate-800 hover:border-emerald-500/50"
+                    }`}
                   >
                     <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 shrink-0">
                       {getItemIcon(item.type)}
