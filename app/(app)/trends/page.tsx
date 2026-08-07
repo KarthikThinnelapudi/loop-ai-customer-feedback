@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
 import { TrendingUp, AlertTriangle, Layers, ChevronRight } from "lucide-react";
-
 
 interface SpikingTheme {
   id: string;
@@ -62,11 +62,22 @@ const themeTrendsData: SpikingTheme[] = [
   },
 ];
 
-export default function TrendsPage() {
+function TrendsContent() {
+  const searchParams = useSearchParams();
+  const themeParam = searchParams.get("theme");
   const [selectedTheme, setSelectedTheme] = useState<SpikingTheme | null>(themeTrendsData[0]);
 
+  useEffect(() => {
+    if (themeParam) {
+      const match = themeTrendsData.find((t) => t.name.toLowerCase() === themeParam.toLowerCase());
+      if (match) {
+        setSelectedTheme(match);
+      }
+    }
+  }, [themeParam]);
+
   return (
-    <DashboardLayout>
+    <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
         <div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
@@ -159,7 +170,6 @@ export default function TrendsPage() {
                   <div key={idx} className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
                     <p className="text-xs text-slate-300 italic">&quot;{q}&quot;</p>
                     <div className="flex items-center justify-between pt-1 text-[10px] text-slate-500">
-
                       <span>Verified Customer Quote</span>
                       <span className="text-emerald-400 font-mono">Confidence: 94.2%</span>
                     </div>
@@ -174,6 +184,16 @@ export default function TrendsPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+export default function TrendsPage() {
+  return (
+    <DashboardLayout>
+      <Suspense fallback={<div className="p-8 text-white font-mono text-xs">Loading theme trends...</div>}>
+        <TrendsContent />
+      </Suspense>
     </DashboardLayout>
   );
 }

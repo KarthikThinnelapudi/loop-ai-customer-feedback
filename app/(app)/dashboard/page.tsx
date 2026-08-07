@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
 import CSVUploadModal from "@/components/feedback/CSVUploadModal";
+import PermissionModal from "@/components/common/PermissionModal";
 import {
   TrendingUp,
   MessageSquare,
@@ -87,12 +89,18 @@ const recentActivity = [
 ];
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [timeRange, setTimeRange] = useState("7d");
   const [totalVolume, setTotalVolume] = useState(548);
   const [positiveRatio, setPositiveRatio] = useState("82.4%");
   const [criticalSpikesCount, setCriticalSpikesCount] = useState(3);
   const [topThemes, setTopThemes] = useState(defaultThemesData);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+
+  // RBAC Permission Modal State
+  const [permissionModalOpen, setPermissionModalOpen] = useState(false);
+  const [permissionMessage] = useState("");
+  const [requiredRole] = useState("");
 
   const fetchStats = useCallback(() => {
     fetch("/api/dashboard/stats")
@@ -119,6 +127,11 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
+
+  const handleNavigateThemes = (themeTitle?: string) => {
+    const url = themeTitle ? `/trends?theme=${encodeURIComponent(themeTitle)}` : "/trends";
+    router.push(url);
+  };
 
   return (
     <DashboardLayout>
@@ -176,44 +189,52 @@ export default function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <Card glow>
-          <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-            <span>Total Feedback</span>
-            <MessageSquare className="w-4 h-4 text-emerald-400" />
-          </div>
-          <h3 className="text-3xl font-bold mt-2 text-white">{totalVolume}</h3>
-          <div className="flex items-center gap-1.5 mt-2 text-xs text-emerald-400 font-semibold">
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span>+18.4% from last period</span>
-          </div>
-        </Card>
+        <Link href="/feedback">
+          <Card glow className="hover:border-emerald-500/50 cursor-pointer transition">
+            <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
+              <span>Total Feedback</span>
+              <MessageSquare className="w-4 h-4 text-emerald-400" />
+            </div>
+            <h3 className="text-3xl font-bold mt-2 text-white">{totalVolume}</h3>
+            <div className="flex items-center gap-1.5 mt-2 text-xs text-emerald-400 font-semibold">
+              <TrendingUp className="w-3.5 h-3.5" />
+              <span>+18.4% from last period</span>
+            </div>
+          </Card>
+        </Link>
 
-        <Card>
-          <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-            <span>Sentiment Score</span>
-            <Smile className="w-4 h-4 text-emerald-400" />
-          </div>
-          <h3 className="text-3xl font-bold mt-2 text-emerald-400">{positiveRatio}</h3>
-          <p className="text-slate-400 text-xs mt-2">68% Pos / 18% Neu / 14% Neg</p>
-        </Card>
+        <Link href="/analytics">
+          <Card className="hover:border-emerald-500/50 cursor-pointer transition">
+            <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
+              <span>Sentiment Score</span>
+              <Smile className="w-4 h-4 text-emerald-400" />
+            </div>
+            <h3 className="text-3xl font-bold mt-2 text-emerald-400">{positiveRatio}</h3>
+            <p className="text-slate-400 text-xs mt-2">68% Pos / 18% Neu / 14% Neg</p>
+          </Card>
+        </Link>
 
-        <Card>
-          <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-            <span>Active AI Clusters</span>
-            <Layers className="w-4 h-4 text-teal-400" />
-          </div>
-          <h3 className="text-3xl font-bold mt-2 text-teal-300">{topThemes.length} Themes</h3>
-          <p className="text-slate-400 text-xs mt-2">2 themes spiking in volume</p>
-        </Card>
+        <div onClick={() => handleNavigateThemes()}>
+          <Card className="hover:border-teal-500/50 cursor-pointer transition">
+            <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
+              <span>Active AI Clusters</span>
+              <Layers className="w-4 h-4 text-teal-400" />
+            </div>
+            <h3 className="text-3xl font-bold mt-2 text-teal-300">{topThemes.length} Themes</h3>
+            <p className="text-slate-400 text-xs mt-2">2 themes spiking in volume</p>
+          </Card>
+        </div>
 
-        <Card>
-          <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-            <span>Needs Action</span>
-            <AlertTriangle className="w-4 h-4 text-rose-400" />
-          </div>
-          <h3 className="text-3xl font-bold mt-2 text-rose-400">{criticalSpikesCount} Critical</h3>
-          <p className="text-slate-400 text-xs mt-2">High severity negative quotes</p>
-        </Card>
+        <Link href="/feedback?status=NEW">
+          <Card className="hover:border-rose-500/50 cursor-pointer transition">
+            <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
+              <span>Needs Action</span>
+              <AlertTriangle className="w-4 h-4 text-rose-400" />
+            </div>
+            <h3 className="text-3xl font-bold mt-2 text-rose-400">{criticalSpikesCount} Critical</h3>
+            <p className="text-slate-400 text-xs mt-2">High severity negative quotes</p>
+          </Card>
+        </Link>
       </div>
 
       {/* Main Charts Row */}
@@ -323,9 +344,12 @@ export default function DashboardPage() {
               <Layers className="w-4 h-4 text-emerald-400" />
               Top AI Theme Clusters
             </h3>
-            <Link href="/trends" className="text-xs text-emerald-400 font-semibold hover:underline">
+            <button
+              onClick={() => handleNavigateThemes()}
+              className="text-xs text-emerald-400 font-semibold hover:underline bg-transparent border-0 cursor-pointer"
+            >
               View All →
-            </Link>
+            </button>
           </div>
 
           <div className="h-64 w-full pt-2">
@@ -342,7 +366,13 @@ export default function DashboardPage() {
                     color: "#fff",
                   }}
                 />
-                <Bar dataKey="count" fill="#10B981" radius={[0, 8, 8, 0]} />
+                <Bar
+                  dataKey="count"
+                  fill="#10B981"
+                  radius={[0, 8, 8, 0]}
+                  onClick={() => handleNavigateThemes()}
+                  className="cursor-pointer hover:opacity-80"
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -398,13 +428,21 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Shared CSV Upload Modal Single Source of Truth */}
+      {/* Shared CSV Upload Modal */}
       <CSVUploadModal
         isOpen={isCsvModalOpen}
         onClose={() => setIsCsvModalOpen(false)}
         onSuccess={() => {
           fetchStats();
         }}
+      />
+
+      {/* Permission Restricted Alert Modal */}
+      <PermissionModal
+        isOpen={permissionModalOpen}
+        onClose={() => setPermissionModalOpen(false)}
+        message={permissionMessage}
+        requiredRole={requiredRole}
       />
     </DashboardLayout>
   );
