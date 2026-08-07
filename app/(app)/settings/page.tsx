@@ -1,22 +1,51 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
 import SecretKeyMasker from "@/components/common/SecretKeyMasker";
-import { Building, Key, CheckCircle2, Save } from "lucide-react";
-
-
+import { hasPermission } from "@/lib/rbac";
+import { Building, Key, CheckCircle2, Save, ShieldAlert } from "lucide-react";
 
 export default function SettingsPage() {
+  const { data: session } = useSession();
+  const userRole = (session?.user as { role?: string })?.role?.toUpperCase() || "VIEWER";
+
+  const canManageSettings = hasPermission(userRole, "workspace:settings");
+
   const [workspaceName, setWorkspaceName] = useState("Acme Production Workspace");
   const [saved, setSaved] = useState(false);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageSettings) return;
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
+
+  if (!canManageSettings) {
+    return (
+      <DashboardLayout>
+        <div className="border-b border-slate-800/80 pb-6">
+          <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
+            <Building className="w-7 h-7 text-emerald-400" />
+            <span>Workspace Settings</span>
+          </h1>
+        </div>
+
+        <Card className="p-12 text-center space-y-4 max-w-xl mx-auto border-amber-500/30 bg-amber-500/5 mt-8">
+          <div className="w-12 h-12 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <h2 className="text-xl font-bold text-white">403 Forbidden — Access Restricted</h2>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Workspace Settings and tenant configuration controls are restricted to <strong>Owner and Admin</strong> roles. Analysts and Viewers are not authorized to view or manage tenant administration settings.
+          </p>
+        </Card>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -95,9 +124,9 @@ export default function SettingsPage() {
             label="Live Ingestion Secret Key"
             secretKey="loop_live_sk_9921481948194819"
             prefix="loop_live_sk_"
-            userRole="ADMIN"
+            userRole={userRole}
             onRegenerate={() => {
-              // Simulated key regeneration
+              // Key regeneration handler
             }}
           />
         </Card>
@@ -105,4 +134,3 @@ export default function SettingsPage() {
     </DashboardLayout>
   );
 }
-

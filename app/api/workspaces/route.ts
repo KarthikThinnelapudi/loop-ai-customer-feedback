@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
+import { hasPermission } from "@/lib/rbac";
 
 const workspaceSchema = z.object({
   name: z.string().min(2, "Workspace name required"),
@@ -53,16 +54,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await req.json();
-    const data = workspaceSchema.parse(body);
-
     const user = await db.user.findUnique({
       where: { email: session.user.email },
+      include: { memberships: true },
     });
 
     if (!user) {
       return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
+
+    const role = user.memberships[0]?.role || "VIEWER";
+
+    // Strict RBAC Enforcement: Only Owner/Admin can modify or create workspace settings
+    if (!hasPermission(role, "workspace:settings")) {
+      return NextResponse.json(
+        { message: "Forbidden: Analysts, Viewers, and non-admin roles cannot modify workspace settings." },
+        { status: 403 }
+      );
+    }
+
+    const body = await req.json();
+    const data = workspaceSchema.parse(body);
 
     const slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     const workspace = await db.workspace.create({
@@ -90,4 +102,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Failed to create workspace" }, { status: 500 });
   }
 }
-

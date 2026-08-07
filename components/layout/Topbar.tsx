@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   Search,
   Bell,
@@ -20,6 +21,7 @@ import {
   Users,
 } from "lucide-react";
 import { useDismissablePanel } from "@/hooks/useDismissablePanel";
+import { hasPermission } from "@/lib/rbac";
 
 interface NotificationItem {
   id: string;
@@ -75,6 +77,12 @@ export default function Topbar({
   onOpenNewFeedback?: () => void;
 }) {
   const router = useRouter();
+  const { data: session } = useSession();
+  const userRole = (session?.user as { role?: string })?.role?.toUpperCase() || "VIEWER";
+
+  const canViewSettings = hasPermission(userRole, "workspace:settings");
+  const canViewTeam = hasPermission(userRole, "team:view") || hasPermission(userRole, "users:manage");
+
   const {
     openPanel,
     closeAll,
@@ -249,7 +257,6 @@ export default function Topbar({
           {/* Notifications Dropdown Panel */}
           {isNotifOpen && (
             <>
-              {/* Click outside backdrop */}
               <div className="fixed inset-0 z-40" onClick={closeAll} />
 
               <div className="absolute right-0 mt-3 w-80 sm:w-96 rounded-2xl border border-slate-800 bg-slate-900/95 backdrop-blur-2xl p-4 shadow-2xl z-50 space-y-3">
@@ -321,7 +328,7 @@ export default function Topbar({
           )}
         </div>
 
-        {/* User Badge / Profile Menu */}
+        {/* Dynamic User Badge / Profile Menu (Strict RBAC Enforced) */}
         <div className="relative">
           <button
             onClick={() => openPanel("profile")}
@@ -329,7 +336,9 @@ export default function Topbar({
           >
             <div className="flex items-center gap-1.5">
               <Shield className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-xs font-semibold text-slate-200 hidden sm:inline">Admin</span>
+              <span className="text-xs font-semibold text-slate-200 hidden sm:inline capitalize">
+                {userRole.toLowerCase()}
+              </span>
             </div>
             <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center justify-center text-xs font-bold">
               <User className="w-3.5 h-3.5" />
@@ -347,20 +356,28 @@ export default function Topbar({
                 >
                   My Profile
                 </Link>
-                <Link
-                  href="/settings"
-                  onClick={closeAll}
-                  className="block px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition"
-                >
-                  Workspace Settings
-                </Link>
-                <Link
-                  href="/settings/team"
-                  onClick={closeAll}
-                  className="block px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition"
-                >
-                  Team & RBAC
-                </Link>
+
+                {/* Workspace Settings (Admin & Owner ONLY) */}
+                {canViewSettings && (
+                  <Link
+                    href="/settings"
+                    onClick={closeAll}
+                    className="block px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                  >
+                    Workspace Settings
+                  </Link>
+                )}
+
+                {/* Team & RBAC (Admin & Owner ONLY) */}
+                {canViewTeam && (
+                  <Link
+                    href="/settings/team"
+                    onClick={closeAll}
+                    className="block px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                  >
+                    Team & RBAC
+                  </Link>
+                )}
               </div>
             </>
           )}
