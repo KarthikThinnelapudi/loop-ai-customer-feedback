@@ -39,6 +39,7 @@ export async function GET(req: Request) {
       return NextResponse.json([]);
     }
 
+    const canViewThemes = hasPermission(role, "trends:view");
     const canViewUsers = hasPermission(role, "team:view") || hasPermission(role, "users:manage");
     const canViewReports = hasPermission(role, "reports:view");
     const canViewAskAI = hasPermission(role, "ask_ai:access");
@@ -58,16 +59,18 @@ export async function GET(req: Request) {
         take: 5,
         orderBy: { createdAt: "desc" },
       }),
-      db.feedbackTheme.findMany({
-        where: {
-          workspaceId,
-          OR: [
-            { title: { contains: query, mode: "insensitive" } },
-            { description: { contains: query, mode: "insensitive" } },
-          ],
-        },
-        take: 5,
-      }),
+      canViewThemes
+        ? db.feedbackTheme.findMany({
+            where: {
+              workspaceId,
+              OR: [
+                { title: { contains: query, mode: "insensitive" } },
+                { description: { contains: query, mode: "insensitive" } },
+              ],
+            },
+            take: 5,
+          })
+        : [],
       canViewReports
         ? db.report.findMany({
             where: {

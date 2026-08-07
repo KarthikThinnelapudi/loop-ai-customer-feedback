@@ -2,9 +2,11 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
-import { TrendingUp, AlertTriangle, Layers, ChevronRight } from "lucide-react";
+import { hasPermission } from "@/lib/rbac";
+import { TrendingUp, AlertTriangle, Layers, ChevronRight, ShieldAlert } from "lucide-react";
 
 interface SpikingTheme {
   id: string;
@@ -63,6 +65,11 @@ const themeTrendsData: SpikingTheme[] = [
 ];
 
 function TrendsContent() {
+  const { data: session } = useSession();
+  const userRole = (session?.user as { role?: string })?.role?.toUpperCase() || "VIEWER";
+
+  const canViewTrends = hasPermission(userRole, "trends:view");
+
   const searchParams = useSearchParams();
   const themeParam = searchParams.get("theme");
   const [selectedTheme, setSelectedTheme] = useState<SpikingTheme | null>(themeTrendsData[0]);
@@ -75,6 +82,34 @@ function TrendsContent() {
       }
     }
   }, [themeParam]);
+
+  if (!canViewTrends) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
+          <div>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
+              <TrendingUp className="w-7 h-7 text-emerald-400" />
+              <span>Theme Trends & Spike Detection</span>
+            </h1>
+            <p className="text-slate-400 text-sm mt-1">
+              Automated velocity monitoring surfacing emerging customer friction
+            </p>
+          </div>
+        </div>
+
+        <Card className="p-12 text-center space-y-4 max-w-xl mx-auto border-amber-500/30 bg-amber-500/5">
+          <div className="w-12 h-12 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <h2 className="text-xl font-bold text-white">403 Forbidden — Access Restricted</h2>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Access to <strong>AI Theme Clusters & Velocity Monitoring</strong> is restricted according to the enterprise RBAC permission matrix. Only <strong>Owner, Admin, Manager, and Analyst</strong> roles are authorized to view theme intelligence.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

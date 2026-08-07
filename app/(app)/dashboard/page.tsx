@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
 import CSVUploadModal from "@/components/feedback/CSVUploadModal";
 import PermissionModal from "@/components/common/PermissionModal";
+import { hasPermission } from "@/lib/rbac";
 import {
   TrendingUp,
   MessageSquare,
@@ -90,6 +92,12 @@ const recentActivity = [
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { data: session } = useSession();
+  const userRole = (session?.user as { role?: string })?.role?.toUpperCase() || "VIEWER";
+
+  // Centralized RBAC Permission Check for AI Themes
+  const canViewThemes = hasPermission(userRole, "trends:view");
+
   const [timeRange, setTimeRange] = useState("7d");
   const [totalVolume, setTotalVolume] = useState(548);
   const [positiveRatio, setPositiveRatio] = useState("82.4%");
@@ -110,7 +118,7 @@ export default function DashboardPage() {
           if (stats.totalVolume) setTotalVolume(stats.totalVolume);
           if (stats.positiveRatio) setPositiveRatio(stats.positiveRatio);
           if (stats.criticalSpikesCount !== undefined) setCriticalSpikesCount(stats.criticalSpikesCount);
-          if (Array.isArray(stats.themes) && stats.themes.length > 0) {
+          if (Array.isArray(stats.themes) && stats.themes.length > 0 && canViewThemes) {
             setTopThemes(
               stats.themes.map((t: { title: string; mentions?: number; count?: number }) => ({
                 theme: t.title,
@@ -122,13 +130,17 @@ export default function DashboardPage() {
         }
       })
       .catch(() => {});
-  }, []);
+  }, [canViewThemes]);
 
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
 
   const handleNavigateThemes = (themeTitle?: string) => {
+    if (!canViewThemes) {
+      setPermissionModalOpen(true);
+      return;
+    }
     const url = themeTitle ? `/trends?theme=${encodeURIComponent(themeTitle)}` : "/trends";
     router.push(url);
   };
@@ -187,8 +199,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      {/* KPI Cards Grid */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${canViewThemes ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-5`}>
         <Link href="/feedback">
           <Card glow className="hover:border-emerald-500/50 cursor-pointer transition">
             <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
@@ -214,16 +226,18 @@ export default function DashboardPage() {
           </Card>
         </Link>
 
-        <div onClick={() => handleNavigateThemes()}>
-          <Card className="hover:border-teal-500/50 cursor-pointer transition">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-              <span>Active AI Clusters</span>
-              <Layers className="w-4 h-4 text-teal-400" />
-            </div>
-            <h3 className="text-3xl font-bold mt-2 text-teal-300">{topThemes.length} Themes</h3>
-            <p className="text-slate-400 text-xs mt-2">2 themes spiking in volume</p>
-          </Card>
-        </div>
+        {canViewThemes && (
+          <div onClick={() => handleNavigateThemes()}>
+            <Card className="hover:border-teal-500/50 cursor-pointer transition">
+              <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
+                <span>Active AI Clusters</span>
+                <Layers className="w-4 h-4 text-teal-400" />
+              </div>
+              <h3 className="text-3xl font-bold mt-2 text-teal-300">{topThemes.length} Themes</h3>
+              <p className="text-slate-400 text-xs mt-2">2 themes spiking in volume</p>
+            </Card>
+          </div>
+        )}
 
         <Link href="/feedback?status=NEW">
           <Card className="hover:border-rose-500/50 cursor-pointer transition">
@@ -335,51 +349,53 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Second Row: Top Themes & Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Themes Bar Chart */}
-        <Card className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <Layers className="w-4 h-4 text-emerald-400" />
-              Top AI Theme Clusters
-            </h3>
-            <button
-              onClick={() => handleNavigateThemes()}
-              className="text-xs text-emerald-400 font-semibold hover:underline bg-transparent border-0 cursor-pointer"
-            >
-              View All →
-            </button>
-          </div>
+      {/* Second Row: Top Themes (Protected by RBAC) & Recent Activity */}
+      <div className={`grid grid-cols-1 ${canViewThemes ? "lg:grid-cols-2" : "lg:grid-cols-1"} gap-6`}>
+        {/* Top Themes Bar Chart Widget - Rendered ONLY if canViewThemes is true */}
+        {canViewThemes && (
+          <Card className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Layers className="w-4 h-4 text-emerald-400" />
+                Top AI Theme Clusters
+              </h3>
+              <button
+                onClick={() => handleNavigateThemes()}
+                className="text-xs text-emerald-400 font-semibold hover:underline bg-transparent border-0 cursor-pointer"
+              >
+                View All →
+              </button>
+            </div>
 
-          <div className="h-64 w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart layout="vertical" data={topThemes} margin={{ left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
-                <XAxis type="number" stroke="#64748b" fontSize={11} />
-                <YAxis dataKey="theme" type="category" stroke="#94a3b8" fontSize={11} width={130} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#090d16",
-                    borderColor: "#1e293b",
-                    borderRadius: "12px",
-                    color: "#fff",
-                  }}
-                />
-                <Bar
-                  dataKey="count"
-                  fill="#10B981"
-                  radius={[0, 8, 8, 0]}
-                  onClick={() => handleNavigateThemes()}
-                  className="cursor-pointer hover:opacity-80"
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
+            <div className="h-64 w-full pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart layout="vertical" data={topThemes} margin={{ left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+                  <XAxis type="number" stroke="#64748b" fontSize={11} />
+                  <YAxis dataKey="theme" type="category" stroke="#94a3b8" fontSize={11} width={130} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#090d16",
+                      borderColor: "#1e293b",
+                      borderRadius: "12px",
+                      color: "#fff",
+                    }}
+                  />
+                  <Bar
+                    dataKey="count"
+                    fill="#10B981"
+                    radius={[0, 8, 8, 0]}
+                    onClick={() => handleNavigateThemes()}
+                    className="cursor-pointer hover:opacity-80"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        )}
 
         {/* Recent Feedback Triage Feed */}
-        <Card className="space-y-4">
+        <Card className={`space-y-4 ${!canViewThemes ? "lg:col-span-1" : ""}`}>
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-teal-400" />
