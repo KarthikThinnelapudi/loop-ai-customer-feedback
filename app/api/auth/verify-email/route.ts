@@ -3,13 +3,20 @@ import { db } from "@/lib/db";
 import { z } from "zod";
 import { sendWelcomeEmail } from "@/lib/email";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const verifyEmailSchema = z.object({
   token: z.string().min(1, "Token is required"),
 });
 
 export async function POST(req: Request) {
+  const headers = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+  };
+
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { token } = verifyEmailSchema.parse(body);
 
     const verificationToken = await db.verificationToken.findFirst({
@@ -17,11 +24,17 @@ export async function POST(req: Request) {
     });
 
     if (!verificationToken) {
-      return NextResponse.json({ message: "Invalid or expired verification token." }, { status: 400 });
+      return NextResponse.json(
+        { message: "Invalid or expired verification token. Please request a new link." },
+        { status: 400, headers }
+      );
     }
 
     if (verificationToken.expires < new Date()) {
-      return NextResponse.json({ message: "Verification token has expired. Please request a new link." }, { status: 400 });
+      return NextResponse.json(
+        { message: "Verification token has expired. Please request a new link." },
+        { status: 400, headers }
+      );
     }
 
     const email = verificationToken.identifier;
@@ -56,14 +69,17 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json(
-      { message: "Email verified successfully! Welcome to CustomerLoop." },
-      { status: 200 }
+      { message: "Email verified successfully! Welcome to LOOP AI." },
+      { status: 200, headers }
     );
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: error.issues[0]?.message }, { status: 400 });
+      return NextResponse.json({ message: error.issues[0]?.message }, { status: 400, headers });
     }
     console.error("Email Verification Error:", error);
-    return NextResponse.json({ message: "Internal server error during email verification." }, { status: 500 });
+    return NextResponse.json(
+      { message: "Internal server error during email verification." },
+      { status: 500, headers }
+    );
   }
 }

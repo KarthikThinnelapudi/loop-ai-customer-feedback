@@ -3,13 +3,20 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { sendVerificationEmail } from "@/lib/email";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const resendSchema = z.object({
   email: z.string().email("Invalid email address"),
 });
 
 export async function POST(req: Request) {
+  const headers = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+  };
+
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { email } = resendSchema.parse(body);
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -18,7 +25,10 @@ export async function POST(req: Request) {
     });
 
     if (!user) {
-      return NextResponse.json({ message: "If account exists, a new verification link has been sent." });
+      return NextResponse.json(
+        { message: "If account exists, a new verification link has been sent." },
+        { status: 200, headers }
+      );
     }
 
     const tokenStr = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -42,17 +52,20 @@ export async function POST(req: Request) {
 
     await sendVerificationEmail({
       to: normalizedEmail,
-      name: user.name || "User",
+      name: user.name || "Customer",
       verifyUrl,
       expiresHours: 24,
     });
 
-    return NextResponse.json({ message: "A new verification email has been sent to your address." });
+    return NextResponse.json(
+      { message: "A new verification email has been sent to your address." },
+      { status: 200, headers }
+    );
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: error.issues[0]?.message }, { status: 400 });
+      return NextResponse.json({ message: error.issues[0]?.message }, { status: 400, headers });
     }
     console.error("Resend Verification Error:", error);
-    return NextResponse.json({ message: "Failed to resend verification email." }, { status: 500 });
+    return NextResponse.json({ message: "Failed to resend verification email." }, { status: 500, headers });
   }
 }

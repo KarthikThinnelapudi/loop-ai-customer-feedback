@@ -16,15 +16,15 @@ export function renderPasswordResetEmail({
   html: string;
   text: string;
 } {
-  const subject = "Reset your CustomerLoop Password";
-  const previewText = "We received a request to reset your CustomerLoop password.";
+  const subject = "Reset your LOOP AI Password";
+  const previewText = "We received a request to reset your LOOP AI password.";
 
   const contentHtml = `
     <h1 style="font-family: 'Inter', -apple-system, sans-serif; font-size: 22px; font-weight: 700; color: #f8fafc; margin: 0 0 16px 0;">
       Password Reset Request
     </h1>
     <p style="font-family: 'Inter', -apple-system, sans-serif; font-size: 15px; color: #cbd5e1; line-height: 1.6; margin: 0 0 16px 0;">
-      Hi ${name || "there"}, we received a request to reset your password for your CustomerLoop account. Click the button below to set a new password:
+      Hi ${name || "there"}, we received a request to reset your password for your <strong>LOOP AI</strong> account. Click the button below to set a new password:
     </p>
 
     ${renderEmailButton({ href: resetUrl, text: "Reset Password", variant: "cyan" })}
@@ -34,6 +34,11 @@ export function renderPasswordResetEmail({
         ⏳ <strong>Security Limit:</strong> This single-use password reset link will expire in <strong>${expiresHours} hour</strong>.
       </p>
     </div>
+
+    <p style="font-family: sans-serif; font-size: 12px; color: #94a3b8; margin-top: 16px;">
+      If the button above does not work, copy and paste this URL into your browser:<br/>
+      <a href="${resetUrl}" style="color: #10b981; word-break: break-all;">${resetUrl}</a>
+    </p>
   `;
 
   const html = renderEmailContainer({
@@ -44,7 +49,7 @@ export function renderPasswordResetEmail({
     showUnsubscribe: false,
   });
 
-  const text = `Hi ${name},\n\nWe received a request to reset your CustomerLoop password. Use this secure link to set a new password: ${resetUrl}\n\nLink expires in ${expiresHours} hour. If you didn't request this, your account remains secure.`;
+  const text = `Hi ${name},\n\nWe received a request to reset your LOOP AI password. Use this secure link to set a new password: ${resetUrl}\n\nLink expires in ${expiresHours} hour. If you didn't request this, your account remains secure.`;
 
   return { subject, html, text };
 }

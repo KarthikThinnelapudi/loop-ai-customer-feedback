@@ -3,20 +3,41 @@
 import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Mail, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Mail, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
+
+export const dynamic = "force-dynamic";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
+    setErrorMsg("");
+
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
       setLoading(false);
-      setSubmitted(true);
-    }, 1000);
+      if (res.ok) {
+        setSubmitted(true);
+      } else {
+        setErrorMsg(data.message || "Failed to process request. Please try again.");
+      }
+    } catch {
+      setLoading(false);
+      setErrorMsg("Network error sending password reset email.");
+    }
   };
 
   return (
@@ -24,12 +45,12 @@ export default function ForgotPasswordPage() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="rounded-3xl border border-slate-800 bg-slate-900/80 backdrop-blur-2xl p-8 shadow-[0_0_60px_rgba(16,185,129,0.1)]"
+      className="rounded-3xl border border-slate-800 bg-slate-900/80 backdrop-blur-2xl p-8 shadow-[0_0_60px_rgba(16,185,129,0.1)] max-w-md mx-auto"
     >
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-extrabold text-white tracking-tight">Reset Password</h1>
+        <h1 className="text-3xl font-extrabold text-white tracking-tight">Forgot Password</h1>
         <p className="mt-2 text-sm text-slate-400">
-          Enter your workspace email and we will send you a reset link
+          Enter your LOOP AI account email address to receive password recovery instructions
         </p>
       </div>
 
@@ -40,7 +61,7 @@ export default function ForgotPasswordPage() {
           </div>
           <h2 className="text-xl font-bold text-white">Reset Link Sent</h2>
           <p className="text-sm text-slate-400">
-            If an account exists for <span className="text-emerald-400 font-mono">{email}</span>, you will receive password reset instructions shortly.
+            If an account exists for <span className="text-emerald-400 font-mono">{email}</span>, a secure password reset link has been dispatched to your inbox.
           </p>
           <div className="pt-4">
             <Link
@@ -53,6 +74,13 @@ export default function ForgotPasswordPage() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-5">
+          {errorMsg && (
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-center gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
               Work Email Address

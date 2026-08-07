@@ -6,6 +6,8 @@ import {
   VerifyEmailProps,
   renderPasswordResetEmail,
   PasswordResetEmailProps,
+  renderPasswordChangedEmail,
+  PasswordChangedEmailProps,
   renderWorkspaceInviteEmail,
   WorkspaceInviteEmailProps,
   renderSupportAutoReplyEmail,
@@ -59,7 +61,7 @@ export async function sendEmail({ to, subject, html, text, from }: SendEmailPayl
   const sender = getSanitizedSender(from);
   const resend = getResendClient();
 
-  console.log(`✉️ [CustomerLoop Email Service] Dispatching to: ${to} | Subject: "${subject}" | Sender: ${sender}`);
+  console.log(`✉️ [LOOP AI Email Service] Dispatching to: ${to} | Subject: "${subject}" | Sender: ${sender}`);
 
   if (resend) {
     try {
@@ -144,6 +146,11 @@ export async function sendVerificationEmail(props: VerifyEmailProps & { to: stri
 
 export async function sendPasswordResetEmail(props: PasswordResetEmailProps & { to: string }): Promise<SendEmailResult> {
   const { subject, html, text } = renderPasswordResetEmail(props);
+  return sendEmail({ to: props.to, subject, html, text });
+}
+
+export async function sendPasswordChangedEmail(props: PasswordChangedEmailProps & { to: string }): Promise<SendEmailResult> {
+  const { subject, html, text } = renderPasswordChangedEmail(props);
   return sendEmail({ to: props.to, subject, html, text });
 }
 

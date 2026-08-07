@@ -1,6 +1,7 @@
 export * from "./templates/WelcomeEmail";
 export * from "./templates/VerifyEmail";
 export * from "./templates/PasswordResetEmail";
+export * from "./templates/PasswordChangedEmail";
 export * from "./templates/WorkspaceInviteEmail";
 export * from "./templates/SupportAutoReplyEmail";
 export * from "./templates/FeedbackRequestEmail";

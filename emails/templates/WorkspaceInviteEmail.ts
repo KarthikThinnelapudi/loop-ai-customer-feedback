@@ -20,15 +20,15 @@ export function renderWorkspaceInviteEmail({
   html: string;
   text: string;
 } {
-  const subject = `Invitation to join ${workspaceName} on CustomerLoop`;
-  const previewText = `${inviterName} has invited you to join the ${workspaceName} workspace on CustomerLoop.`;
+  const subject = `Invitation to join ${workspaceName} on LOOP AI`;
+  const previewText = `${inviterName} has invited you to join the ${workspaceName} workspace on LOOP AI.`;
 
   const contentHtml = `
     <h1 style="font-family: 'Inter', -apple-system, sans-serif; font-size: 22px; font-weight: 700; color: #f8fafc; margin: 0 0 16px 0;">
       You've Been Invited! 🚀
     </h1>
     <p style="font-family: 'Inter', -apple-system, sans-serif; font-size: 15px; color: #cbd5e1; line-height: 1.6; margin: 0 0 16px 0;">
-      <strong>${inviterName}</strong> has invited you to collaborate on the <strong>${workspaceName}</strong> workspace on CustomerLoop.
+      <strong>${inviterName}</strong> has invited you to collaborate on the <strong>${workspaceName}</strong> workspace on <strong>LOOP AI</strong>.
     </p>
 
     <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 18px; margin: 20px 0;">
@@ -59,7 +59,7 @@ export function renderWorkspaceInviteEmail({
     showUnsubscribe: false,
   });
 
-  const text = `${inviterName} has invited you to join the ${workspaceName} workspace as a ${role} on CustomerLoop.\n\nAccept your invitation here: ${inviteUrl}\n\nLink expires in ${expiresDays} days.`;
+  const text = `${inviterName} has invited you to join the ${workspaceName} workspace as a ${role} on LOOP AI.\n\nAccept your invitation here: ${inviteUrl}\n\nLink expires in ${expiresDays} days.`;
 
   return { subject, html, text };
 }

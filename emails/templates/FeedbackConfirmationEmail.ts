@@ -15,7 +15,7 @@ export function renderFeedbackConfirmationEmail({
   html: string;
   text: string;
 } {
-  const subject = `Feedback Received [Ref #${feedbackId.substring(0, 8)}] — CustomerLoop`;
+  const subject = `Feedback Received [Ref #${feedbackId.substring(0, 8)}] — LOOP AI`;
   const previewText = `Thank you for your feedback! Ref #${feedbackId.substring(0, 8)} has been logged.`;
 
   const contentHtml = `
@@ -23,7 +23,7 @@ export function renderFeedbackConfirmationEmail({
       Thank You for Your Feedback! 🙌
     </h1>
     <p style="font-family: 'Inter', -apple-system, sans-serif; font-size: 15px; color: #cbd5e1; line-height: 1.6; margin: 0 0 16px 0;">
-      Hi ${name || "there"}, we have successfully received your feedback submission. Thank you for taking the time to help us improve.
+      Hi ${name || "there"}, we have successfully received your feedback submission for <strong>LOOP AI</strong>. Thank you for taking the time to help us improve.
     </p>
 
     <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 18px; margin: 20px 0;">
@@ -53,7 +53,7 @@ export function renderFeedbackConfirmationEmail({
     showUnsubscribe: false,
   });
 
-  const text = `Hi ${name},\n\nThank you for submitting feedback! (Ref #${feedbackId.substring(0, 8)}).\nSummary: "${summary}"\n\nOur product team reviews all submissions daily to improve CustomerLoop.`;
+  const text = `Hi ${name},\n\nThank you for submitting feedback to LOOP AI! (Ref #${feedbackId.substring(0, 8)}).\nSummary: "${summary}"\n\nOur product team reviews all submissions daily to improve LOOP AI.`;
 
   return { subject, html, text };
 }

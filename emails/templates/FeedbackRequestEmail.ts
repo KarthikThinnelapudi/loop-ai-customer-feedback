@@ -16,15 +16,15 @@ export function renderFeedbackRequestEmail({
   html: string;
   text: string;
 } {
-  const subject = "How was your recent experience with CustomerLoop?";
-  const previewText = "We'd love your feedback to help us improve your CustomerLoop intelligence platform.";
+  const subject = "How was your recent experience with LOOP AI?";
+  const previewText = "We'd love your feedback to help us improve your LOOP AI intelligence platform.";
 
   const contentHtml = `
     <h1 style="font-family: 'Inter', -apple-system, sans-serif; font-size: 22px; font-weight: 700; color: #f8fafc; margin: 0 0 16px 0;">
       We Value Your Feedback 💬
     </h1>
     <p style="font-family: 'Inter', -apple-system, sans-serif; font-size: 15px; color: #cbd5e1; line-height: 1.6; margin: 0 0 16px 0;">
-      Hi ${name || "there"}, thank you for using CustomerLoop. We are constantly striving to refine our AI Customer Feedback platform.
+      Hi ${name || "there"}, thank you for using <strong>LOOP AI</strong>. We are constantly striving to refine our AI Customer Feedback platform.
     </p>
     <p style="font-family: 'Inter', -apple-system, sans-serif; font-size: 15px; color: #cbd5e1; line-height: 1.6; margin: 0 0 16px 0;">
       Could you take 30 seconds to share your thoughts on your ${category}? Your feedback directly shapes our product roadmap.
@@ -44,7 +44,7 @@ export function renderFeedbackRequestEmail({
     showUnsubscribe: true,
   });
 
-  const text = `Hi ${name},\n\nWe'd love your feedback on your ${category} with CustomerLoop. Share your thoughts here: ${surveyUrl}`;
+  const text = `Hi ${name},\n\nWe'd love your feedback on your ${category} with LOOP AI. Share your thoughts here: ${surveyUrl}`;
 
   return { subject, html, text };
 }

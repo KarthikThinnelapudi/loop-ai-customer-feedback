@@ -3,13 +3,20 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { sendPasswordResetEmail } from "@/lib/email";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const forgotPasswordSchema = z.object({
   email: z.string().email("Invalid email address"),
 });
 
 export async function POST(req: Request) {
+  const headers = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+  };
+
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { email } = forgotPasswordSchema.parse(body);
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -18,10 +25,11 @@ export async function POST(req: Request) {
     });
 
     if (!user) {
-      // Return success to prevent email enumeration
-      return NextResponse.json({
-        message: "If an account with that email exists, we have sent a password reset link.",
-      });
+      // Prevent email enumeration attack
+      return NextResponse.json(
+        { message: "If an account with that email exists, we have sent a password reset link." },
+        { status: 200, headers }
+      );
     }
 
     const tokenStr = "reset_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -45,19 +53,20 @@ export async function POST(req: Request) {
 
     await sendPasswordResetEmail({
       to: normalizedEmail,
-      name: user.name || "User",
+      name: user.name || "Customer",
       resetUrl,
       expiresHours: 1,
     });
 
-    return NextResponse.json({
-      message: "If an account with that email exists, we have sent a password reset link.",
-    });
+    return NextResponse.json(
+      { message: "If an account with that email exists, we have sent a password reset link." },
+      { status: 200, headers }
+    );
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: error.issues[0]?.message }, { status: 400 });
+      return NextResponse.json({ message: error.issues[0]?.message }, { status: 400, headers });
     }
     console.error("Forgot Password Error:", error);
-    return NextResponse.json({ message: "Failed to send password reset email." }, { status: 500 });
+    return NextResponse.json({ message: "Failed to send password reset email." }, { status: 500, headers });
   }
 }

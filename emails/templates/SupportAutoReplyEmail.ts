@@ -25,7 +25,7 @@ export function renderSupportAutoReplyEmail({
       Support Request Received 📩
     </h1>
     <p style="font-family: 'Inter', -apple-system, sans-serif; font-size: 15px; color: #cbd5e1; line-height: 1.6; margin: 0 0 16px 0;">
-      Hi ${name || "there"}, thank you for contacting CustomerLoop Support. We have received your inquiry and created a tracking ticket for your request:
+      Hi ${name || "there"}, thank you for contacting <strong>LOOP AI Support</strong>. We have received your inquiry and created a tracking ticket for your request:
     </p>
 
     <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 18px; margin: 20px 0;">

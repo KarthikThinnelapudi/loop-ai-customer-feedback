@@ -23,14 +23,13 @@ export function renderEmailFooter({ securityNotice, showUnsubscribe = true }: Em
         <td align="center" style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: #94a3b8; line-height: 1.6;">
           <p style="margin: 0 0 8px 0;">
             Need help? Contact our team at 
-            <a href="mailto:team@customerloop.in" style="color: #10b981; text-decoration: none;">team@customerloop.in</a> 
-            or visit <a href="https://customerloop.in/support" target="_blank" style="color: #10b981; text-decoration: none;">customerloop.in/support</a>.
+            <a href="mailto:team@customerloop.in" style="color: #10b981; text-decoration: none;">team@customerloop.in</a>.
           </p>
           <p style="margin: 0 0 12px 0; color: #64748b;">
-            CustomerLoop Inc. • Enterprise Customer Feedback Intelligence Platform
+            LOOP AI Inc. • Enterprise Customer Intelligence Platform
           </p>
           <p style="margin: 0; color: #475569; font-size: 11px;">
-            © ${new Date().getFullYear()} CustomerLoop. All rights reserved. 
+            © ${new Date().getFullYear()} LOOP AI. All rights reserved. 
             ${
               showUnsubscribe
                 ? `| <a href="https://customerloop.in/unsubscribe" target="_blank" style="color: #64748b; text-decoration: underline;">Unsubscribe Preferences</a>`

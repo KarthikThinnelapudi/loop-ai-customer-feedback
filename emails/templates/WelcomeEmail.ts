@@ -11,15 +11,15 @@ export function renderWelcomeEmail({ name, dashboardUrl = "https://customerloop.
   html: string;
   text: string;
 } {
-  const subject = "Welcome to CustomerLoop — Enterprise Customer Feedback Intelligence";
-  const previewText = "Welcome to CustomerLoop! Transform raw customer feedback into actionable growth insights.";
+  const subject = "Welcome to LOOP AI — Enterprise Customer Feedback Intelligence";
+  const previewText = "Welcome to LOOP AI! Transform raw customer feedback into actionable growth insights.";
 
   const contentHtml = `
     <h1 style="font-family: 'Inter', -apple-system, sans-serif; font-size: 22px; font-weight: 700; color: #f8fafc; margin: 0 0 16px 0;">
-      Welcome to CustomerLoop, ${name || "there"}! 🎉
+      Welcome to LOOP AI, ${name || "there"}! 🎉
     </h1>
     <p style="font-family: 'Inter', -apple-system, sans-serif; font-size: 15px; color: #cbd5e1; line-height: 1.6; margin: 0 0 16px 0;">
-      We're excited to have you on board. CustomerLoop is your enterprise-grade Customer Feedback Intelligence platform, powered by grounded AI RAG technology.
+      We're excited to have you on board. <strong>LOOP AI</strong> is your enterprise-grade Customer Feedback Intelligence platform, powered by grounded AI RAG technology.
     </p>
     <div style="background-color: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 20px; margin: 20px 0;">
       <h3 style="font-family: 'Inter', -apple-system, sans-serif; font-size: 15px; font-weight: 600; color: #10b981; margin: 0 0 10px 0;">
@@ -45,7 +45,7 @@ export function renderWelcomeEmail({ name, dashboardUrl = "https://customerloop.
     showUnsubscribe: true,
   });
 
-  const text = `Welcome to CustomerLoop, ${name}!\n\nWe're excited to have you on board. Access your workspace dashboard at ${dashboardUrl} to start analyzing customer feedback with AI RAG intelligence.`;
+  const text = `Welcome to LOOP AI, ${name}!\n\nWe're excited to have you on board. Access your workspace dashboard at ${dashboardUrl} to start analyzing customer feedback with AI RAG intelligence.`;
 
   return { subject, html, text };
 }
