@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { db } from "@/lib/db";
 import { sendVerificationEmail } from "@/lib/email";
 
@@ -50,9 +51,9 @@ export async function POST(req: Request) {
     // Hash password with 12 bcrypt salt rounds
     const hashedPassword = await bcrypt.hash(validatedData.password, 12);
     
-    // Generate secure 6-digit OTP code & link token
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const tokenStr = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    // Cryptographically secure 6-digit OTP code & link token
+    const otpCode = crypto.randomInt(100000, 999999).toString();
+    const tokenStr = crypto.randomBytes(32).toString("hex");
 
     // Atomic transaction: Workspace -> User -> WorkspaceMember -> VerificationToken
     const result = await db.$transaction(async (tx) => {
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
           description: validatedData.description,
           industry: validatedData.industry || "SaaS / Software",
           teamSize: validatedData.teamSize || "11-50 Employees",
-          apiKey: `loop_live_sk_${Math.random().toString(36).substring(2, 18)}`,
+          apiKey: `loop_live_sk_${crypto.randomBytes(12).toString("hex")}`,
         },
       });
 
@@ -72,7 +73,7 @@ export async function POST(req: Request) {
           name: validatedData.name,
           email: normalizedEmail,
           password: hashedPassword,
-          isVerified: false, // Require email verification before account is active
+          isVerified: false, // Require email verification before account activation
           emailVerified: null,
         },
       });
@@ -90,21 +91,21 @@ export async function POST(req: Request) {
         where: { identifier: normalizedEmail },
       });
 
-      // Save link token
+      // Save link token (24 Hours expiration)
       await tx.verificationToken.create({
         data: {
           identifier: normalizedEmail,
           token: tokenStr,
-          expires: new Date(Date.now() + 24 * 3600 * 1000), // 24 Hours
+          expires: new Date(Date.now() + 24 * 3600 * 1000),
         },
       });
 
-      // Save 6-digit OTP token
+      // Save 6-digit OTP token (15 Minutes secure expiration)
       await tx.verificationToken.create({
         data: {
           identifier: normalizedEmail,
           token: otpCode,
-          expires: new Date(Date.now() + 24 * 3600 * 1000), // 24 Hours
+          expires: new Date(Date.now() + 15 * 60 * 1000),
         },
       });
 
@@ -144,7 +145,6 @@ export async function POST(req: Request) {
         userId: result.user.id,
         email: normalizedEmail,
         requiresVerification: true,
-        otpCode, // Returned for dev testing visibility
       },
       { status: 201 }
     );

@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Sparkles, Menu, X, Home, LayoutDashboard, Layers, DollarSign, HelpCircle } from "lucide-react";
 
-
 const desktopNav = [
   { title: "Features", href: "#features" },
   { title: "Dashboard", href: "#dashboard-preview" },
@@ -16,13 +15,26 @@ const desktopNav = [
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
 
+  // Esc key listener & body scroll locking
   useEffect(() => {
-    document.body.style.overflow = isOpen ? "hidden" : "auto";
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+      window.addEventListener("keydown", handleKeyDown);
+    } else {
+      document.body.style.overflow = "auto";
+    }
+
     return () => {
       document.body.style.overflow = "auto";
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen]);
-
 
   return (
     <>
@@ -55,36 +67,37 @@ export default function Navbar() {
         </Link>
       </div>
 
-      {/* Mobile Hamburger Toggle */}
+      {/* Mobile Hamburger Toggle Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         aria-label="Toggle Navigation Menu"
-        className="lg:hidden flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 border border-slate-800 text-white shadow-lg transition hover:bg-slate-800"
+        className="lg:hidden flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 border border-slate-800 text-white shadow-lg transition hover:bg-slate-800 shrink-0"
       >
         {isOpen ? <X className="w-5 h-5 text-emerald-400" /> : <Menu className="w-5 h-5 text-white" />}
       </button>
 
-      {/* Mobile Drawer Overlay */}
+      {/* Mobile Drawer Overlay Backdrop */}
       {isOpen && (
         <div
           onClick={() => setIsOpen(false)}
-          className="fixed inset-0 z-[99997] bg-black/80 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm lg:hidden transition-opacity"
         />
       )}
 
-      {/* Mobile Drawer */}
+      {/* Mobile Drawer Slide-over */}
       <aside
-        className={`fixed top-0 right-0 z-[99998] lg:hidden h-screen w-[320px] max-w-[85vw] bg-slate-950 border-l border-slate-800 shadow-2xl transition-transform duration-300 ease-in-out p-6 flex flex-col justify-between ${
-          isOpen ? "translate-x-0" : "translate-x-full"
+        className={`fixed top-0 right-0 z-50 lg:hidden h-screen w-[320px] max-w-[85vw] bg-slate-950 border-l border-slate-800 shadow-2xl transition-transform duration-300 ease-in-out p-6 flex flex-col justify-between ${
+          isOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
         }`}
       >
         <div className="space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+          <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-emerald-400" /> Navigation
             </h2>
             <button
               onClick={() => setIsOpen(false)}
+              aria-label="Close menu"
               className="p-1 rounded-lg text-slate-400 hover:text-white"
             >
               <X className="w-5 h-5" />
@@ -130,7 +143,7 @@ export default function Navbar() {
           </nav>
         </div>
 
-        <div className="space-y-3 pt-6 border-t border-slate-800">
+        <div className="space-y-3 pt-6 border-t border-slate-800/80">
           <Link
             href="/login"
             onClick={() => setIsOpen(false)}
@@ -150,4 +163,4 @@ export default function Navbar() {
       </aside>
     </>
   );
-}
+}

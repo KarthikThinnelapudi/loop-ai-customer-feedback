@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import crypto from "crypto";
 import { db } from "@/lib/db";
 import { sendPasswordResetEmail } from "@/lib/email";
 
@@ -32,29 +33,30 @@ export async function POST(req: Request) {
       );
     }
 
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const tokenStr = "reset_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    // Cryptographically secure 6-digit OTP code & link token
+    const otpCode = crypto.randomInt(100000, 999999).toString();
+    const tokenStr = "reset_" + crypto.randomBytes(32).toString("hex");
 
     // Remove previous reset tokens for this user
     await db.verificationToken.deleteMany({
       where: { identifier: normalizedEmail },
     });
 
-    // Save link token
+    // Save link token (1 Hour Expiration)
     await db.verificationToken.create({
       data: {
         identifier: normalizedEmail,
         token: tokenStr,
-        expires: new Date(Date.now() + 3600 * 1000), // 1 Hour Expiration
+        expires: new Date(Date.now() + 3600 * 1000),
       },
     });
 
-    // Save 6-digit OTP token
+    // Save 6-digit OTP token (15 Minutes Expiration)
     await db.verificationToken.create({
       data: {
         identifier: normalizedEmail,
         token: otpCode,
-        expires: new Date(Date.now() + 3600 * 1000), // 1 Hour Expiration
+        expires: new Date(Date.now() + 15 * 60 * 1000),
       },
     });
 
@@ -72,7 +74,6 @@ export async function POST(req: Request) {
       {
         message: "If an account with that email exists, we have sent a password reset verification code.",
         email: normalizedEmail,
-        otpCode, // Provided for dev testing visibility
       },
       { status: 200, headers }
     );
