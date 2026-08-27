@@ -56,12 +56,13 @@ function getResendClient(): Resend | null {
 
 /**
  * Centralized Enterprise Email Dispatcher using Resend API & Verified Domain (team@customerloop.in)
+ * Includes Safe Diagnostic Logging: EMAIL_SEND_STARTED, EMAIL_PROVIDER_RESPONSE, EMAIL_SEND_SUCCESS, EMAIL_SEND_FAILURE
  */
 export async function sendEmail({ to, subject, html, text, from }: SendEmailPayload): Promise<SendEmailResult> {
   const sender = getSanitizedSender(from);
   const resend = getResendClient();
 
-  console.log(`✉️ [LOOP AI Email Service] Dispatching to: ${to} | Subject: "${subject}" | Sender: ${sender}`);
+  console.log(`[EMAIL_SEND_STARTED] Recipient: ${to} | Subject: "${subject}" | Sender: ${sender}`);
 
   if (resend) {
     try {
@@ -73,8 +74,10 @@ export async function sendEmail({ to, subject, html, text, from }: SendEmailPayl
         text: text || subject,
       });
 
+      console.log(`[EMAIL_PROVIDER_RESPONSE] Provider: Resend SDK | Success: ${!!response.data?.id}`);
+
       if (response.data?.id) {
-        console.log(`✅ Email delivered via Resend API to ${to} (ID: ${response.data.id})`);
+        console.log(`[EMAIL_SEND_SUCCESS] Delivered via Resend SDK to ${to} (Message ID: ${response.data.id})`);
         return {
           success: true,
           messageId: response.data.id,
@@ -83,11 +86,11 @@ export async function sendEmail({ to, subject, html, text, from }: SendEmailPayl
       }
 
       if (response.error) {
-        console.warn(`⚠️ Resend API Dispatch Notice: ${response.error.message}`);
+        console.warn(`[EMAIL_SEND_FAILURE] Resend SDK Notice: ${response.error.message}`);
       }
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      console.error(`❌ Resend SDK Dispatch Exception:`, errMsg);
+      console.error(`[EMAIL_SEND_FAILURE] Resend SDK Exception: ${errMsg}`);
     }
   }
 
@@ -110,19 +113,22 @@ export async function sendEmail({ to, subject, html, text, from }: SendEmailPayl
         }),
       });
 
+      console.log(`[EMAIL_PROVIDER_RESPONSE] Provider: Resend REST API | HTTP Status: ${res.status}`);
+
       if (res.ok) {
         const data = await res.json();
-        console.log(`✅ Email delivered via Resend REST API to ${to} (ID: ${data.id})`);
+        console.log(`[EMAIL_SEND_SUCCESS] Delivered via Resend REST API to ${to} (Message ID: ${data.id})`);
         return { success: true, messageId: data.id, provider: "Resend API" };
       }
     } catch (fetchErr) {
-      console.error(`❌ Resend REST API Fetch Error:`, fetchErr);
+      const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+      console.error(`[EMAIL_SEND_FAILURE] Resend REST API Error: ${errMsg}`);
     }
   }
 
   // Development Console Dispatch Logger
   console.log(`--------------------------------------------------`);
-  console.log(`✉️ EMAIL DISPATCH DISPATCHED (DEVELOPMENT CONSOLE DISPATCH)`);
+  console.log(`[EMAIL_SEND_SUCCESS] (DEVELOPMENT CONSOLE DISPATCH)`);
   console.log(`TO: ${to}`);
   console.log(`FROM: ${sender}`);
   console.log(`SUBJECT: ${subject}`);
