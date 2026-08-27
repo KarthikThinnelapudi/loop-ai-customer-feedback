@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { sendVerificationEmail, sendWelcomeEmail } from "@/lib/email";
+import { sendVerificationEmail } from "@/lib/email";
 
 const registerSchema = z.object({
   workspaceName: z.string().min(2, "Workspace name must be at least 2 characters"),
@@ -49,6 +49,9 @@ export async function POST(req: Request) {
 
     // Hash password with 12 bcrypt salt rounds
     const hashedPassword = await bcrypt.hash(validatedData.password, 12);
+    
+    // Generate secure 6-digit OTP code & link token
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const tokenStr = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
     // Atomic transaction: Workspace -> User -> WorkspaceMember -> VerificationToken
@@ -69,8 +72,8 @@ export async function POST(req: Request) {
           name: validatedData.name,
           email: normalizedEmail,
           password: hashedPassword,
-          isVerified: true, // Immediate login post-registration
-          emailVerified: new Date(),
+          isVerified: false, // Require email verification before account is active
+          emailVerified: null,
         },
       });
 
@@ -82,15 +85,25 @@ export async function POST(req: Request) {
         },
       });
 
-      // Clear any previous verification token for this email identifier
+      // Clear any previous verification tokens for this email identifier
       await tx.verificationToken.deleteMany({
         where: { identifier: normalizedEmail },
       });
 
+      // Save link token
       await tx.verificationToken.create({
         data: {
           identifier: normalizedEmail,
           token: tokenStr,
+          expires: new Date(Date.now() + 24 * 3600 * 1000), // 24 Hours
+        },
+      });
+
+      // Save 6-digit OTP token
+      await tx.verificationToken.create({
+        data: {
+          identifier: normalizedEmail,
+          token: otpCode,
           expires: new Date(Date.now() + 24 * 3600 * 1000), // 24 Hours
         },
       });
@@ -102,14 +115,14 @@ export async function POST(req: Request) {
           action: "WORKSPACE_REGISTERED",
           entityType: "Workspace",
           entityId: workspace.id,
-          details: `Created workspace ${workspace.name} and Admin account for ${user.email}`,
+          details: `Created workspace ${workspace.name} and Admin account for ${user.email} (Pending Email Verification)`,
         },
       });
 
       return { workspace, user };
     });
 
-    // Dispatch Verification Email & Welcome Email via Resend API & customerloop.in
+    // Dispatch Verification Email with 6-digit OTP code & link
     try {
       const baseUrl = process.env.NEXTAUTH_URL || "https://customerloop.in";
       const verifyUrl = `${baseUrl}/verify-email?email=${encodeURIComponent(normalizedEmail)}&token=${tokenStr}`;
@@ -120,22 +133,18 @@ export async function POST(req: Request) {
         verifyUrl,
         expiresHours: 24,
       });
-
-      await sendWelcomeEmail({
-        to: normalizedEmail,
-        name: validatedData.name,
-        dashboardUrl: `${baseUrl}/dashboard`,
-      });
     } catch (emailErr) {
-      console.warn("Non-fatal welcome/verification email dispatch warning:", emailErr);
+      console.warn("Non-fatal verification email dispatch warning:", emailErr);
     }
 
     return NextResponse.json(
       {
-        message: "Account registered successfully! Welcome email sent.",
+        message: "Registration successful! Please check your email for your 6-digit verification code.",
         workspaceId: result.workspace.id,
         userId: result.user.id,
-        requiresVerification: false,
+        email: normalizedEmail,
+        requiresVerification: true,
+        otpCode, // Returned for dev testing visibility
       },
       { status: 201 }
     );

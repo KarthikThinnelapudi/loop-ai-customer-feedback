@@ -7,8 +7,16 @@ import { sendPasswordChangedEmail } from "@/lib/email";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const verifyOtpSchema = z.object({
+  step: z.literal("verify-otp"),
+  otp: z.string().min(1, "OTP is required"),
+  email: z.string().email("Invalid email address"),
+});
+
 const resetPasswordSchema = z.object({
-  token: z.string().min(1, "Token is required"),
+  token: z.string().optional(),
+  otp: z.string().optional(),
+  email: z.string().optional(),
   newPassword: z
     .string()
     .min(8, "Password must be at least 8 characters long")
@@ -25,30 +33,69 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { token, newPassword } = resetPasswordSchema.parse(body);
 
-    const resetToken = await db.verificationToken.findFirst({
-      where: { token },
-    });
+    // Step 1: Verify OTP Step
+    if (body.step === "verify-otp") {
+      const { otp, email } = verifyOtpSchema.parse(body);
+      const normalizedEmail = email.trim().toLowerCase();
+
+      const resetToken = await db.verificationToken.findFirst({
+        where: {
+          identifier: normalizedEmail,
+          token: otp.trim(),
+        },
+      });
+
+      if (!resetToken || resetToken.expires < new Date()) {
+        return NextResponse.json(
+          { message: "Invalid or expired password reset verification code." },
+          { status: 400, headers }
+        );
+      }
+
+      return NextResponse.json(
+        { message: "Verification code validated successfully.", valid: true, email: normalizedEmail, token: resetToken.token },
+        { status: 200, headers }
+      );
+    }
+
+    // Step 2: Set New Password Step
+    const { token, otp, email, newPassword } = resetPasswordSchema.parse(body);
+
+    let resetToken = null;
+
+    if (token) {
+      resetToken = await db.verificationToken.findFirst({
+        where: { token: token.trim() },
+      });
+    } else if (otp && email) {
+      const normalizedEmail = email.trim().toLowerCase();
+      resetToken = await db.verificationToken.findFirst({
+        where: {
+          identifier: normalizedEmail,
+          token: otp.trim(),
+        },
+      });
+    }
 
     if (!resetToken || resetToken.expires < new Date()) {
       return NextResponse.json(
-        { message: "Invalid or expired password reset link. Please request a new link." },
+        { message: "Invalid or expired password reset token. Please request a new code." },
         { status: 400, headers }
       );
     }
 
-    const email = resetToken.identifier;
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const targetEmail = resetToken.identifier;
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
 
     const updatedUser = await db.$transaction(async (tx) => {
       const user = await tx.user.update({
-        where: { email },
+        where: { email: targetEmail },
         data: { password: hashedPassword },
       });
 
       await tx.verificationToken.deleteMany({
-        where: { identifier: email },
+        where: { identifier: targetEmail },
       });
 
       return user;
@@ -58,7 +105,7 @@ export async function POST(req: Request) {
     try {
       const baseUrl = process.env.NEXTAUTH_URL || "https://customerloop.in";
       await sendPasswordChangedEmail({
-        to: email,
+        to: targetEmail,
         name: updatedUser.name || "Customer",
         loginUrl: `${baseUrl}/login`,
       });

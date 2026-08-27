@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Lock, Eye, EyeOff, ArrowRight, CheckCircle2, ShieldCheck, AlertCircle } from "lucide-react";
@@ -10,9 +10,11 @@ export const dynamic = "force-dynamic";
 
 function ResetPasswordContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const tokenParam = searchParams.get("token") || "";
+  const otpParam = searchParams.get("otp") || "";
+  const emailParam = searchParams.get("email") || "";
 
-  const [token, setToken] = useState(tokenParam);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -31,8 +33,8 @@ function ResetPasswordContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) {
-      setError("Reset token is missing from URL. Please use the link sent in your email.");
+    if (!tokenParam && !otpParam) {
+      setError("Reset token or code is missing. Please initiate reset from the forgot password page.");
       return;
     }
     if (!isPasswordValid) {
@@ -54,7 +56,12 @@ function ResetPasswordContent() {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
         },
-        body: JSON.stringify({ token, newPassword: password }),
+        body: JSON.stringify({
+          token: tokenParam || undefined,
+          otp: otpParam || undefined,
+          email: emailParam || undefined,
+          newPassword: password,
+        }),
       });
 
       const data = await res.json();
@@ -62,8 +69,11 @@ function ResetPasswordContent() {
 
       if (res.ok) {
         setSubmitted(true);
+        setTimeout(() => {
+          router.push("/login?reset=success");
+        }, 3000);
       } else {
-        setError(data.message || "Failed to reset password. The reset link may be invalid or expired.");
+        setError(data.message || "Failed to reset password. The link or code may be invalid or expired.");
       }
     } catch {
       setLoading(false);
@@ -79,9 +89,9 @@ function ResetPasswordContent() {
       className="rounded-3xl border border-slate-800 bg-slate-900/80 backdrop-blur-2xl p-8 shadow-[0_0_60px_rgba(16,185,129,0.1)] max-w-md mx-auto"
     >
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-extrabold text-white tracking-tight">Set New Password</h1>
+        <h1 className="text-3xl font-extrabold text-white tracking-tight">Create a new password</h1>
         <p className="mt-2 text-sm text-slate-400">
-          Enter your new password below to secure your LOOP AI workspace account
+          Enter your new strong password below to update your account
         </p>
       </div>
 
@@ -90,9 +100,9 @@ function ResetPasswordContent() {
           <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
             <CheckCircle2 className="w-6 h-6" />
           </div>
-          <h2 className="text-xl font-bold text-white">Password Updated Successfully!</h2>
+          <h2 className="text-xl font-bold text-white">Password Reset Successful!</h2>
           <p className="text-sm text-slate-400 leading-relaxed">
-            Your LOOP AI password has been updated and a security confirmation email has been dispatched. You may now log in.
+            Your LOOP AI account password has been updated securely. Redirecting to Sign In...
           </p>
           <div className="pt-4">
             <Link
@@ -109,22 +119,6 @@ function ResetPasswordContent() {
             <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               <span>{error}</span>
-            </div>
-          )}
-
-          {!tokenParam && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                Reset Token
-              </label>
-              <input
-                type="text"
-                required
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="Paste token from email"
-                className="w-full px-4 py-3 bg-slate-950/70 border border-slate-800 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-emerald-500 transition"
-              />
             </div>
           )}
 
@@ -152,10 +146,10 @@ function ResetPasswordContent() {
             </div>
           </div>
 
-          {/* Password Requirements Meter */}
+          {/* Password Strength Indicator */}
           <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
             <div className="flex items-center justify-between text-slate-400 font-semibold mb-1">
-              <span>Password Requirements</span>
+              <span>Password Security Indicator</span>
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="grid grid-cols-2 gap-1.5 text-[11px]">
@@ -196,14 +190,14 @@ function ResetPasswordContent() {
 
           <button
             type="submit"
-            disabled={loading || !isPasswordValid}
-            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold text-sm shadow-[0_0_25px_rgba(16,185,129,0.25)] hover:shadow-[0_0_35px_rgba(16,185,129,0.4)] transition-all duration-300 flex items-center justify-center gap-2 group disabled:opacity-50"
+            disabled={loading || !isPasswordValid || password !== confirmPassword}
+            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold text-sm shadow-[0_0_25px_rgba(16,185,129,0.25)] transition-all duration-300 flex items-center justify-center gap-2 group disabled:opacity-50"
           >
             {loading ? (
               <span className="inline-block w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
             ) : (
               <>
-                <span>Update Password</span>
+                <span>Reset Password</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </>
             )}

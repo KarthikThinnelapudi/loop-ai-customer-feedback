@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
 import CSVUploadModal from "@/components/feedback/CSVUploadModal";
+import FeedbackModal from "@/components/feedback/FeedbackModal";
 import PermissionModal from "@/components/common/PermissionModal";
+import Modal from "@/components/common/Modal";
 import { hasPermission } from "@/lib/rbac";
 import {
   TrendingUp,
@@ -18,6 +20,10 @@ import {
   Sparkles,
   CheckCircle2,
   Upload,
+  Plus,
+  Rocket,
+  ArrowRight,
+  Database,
 } from "lucide-react";
 
 import {
@@ -35,8 +41,8 @@ import {
   Bar,
 } from "recharts";
 
-// Mock Recharts Data
-const volumeData = [
+// Default Volume & Sentiment charts for populated workspaces
+const defaultVolumeData = [
   { date: "Mon", total: 45, positive: 32, negative: 13 },
   { date: "Tue", total: 68, positive: 50, negative: 18 },
   { date: "Wed", total: 85, positive: 65, negative: 20 },
@@ -46,7 +52,7 @@ const volumeData = [
   { date: "Sun", total: 72, positive: 58, negative: 14 },
 ];
 
-const sentimentData = [
+const defaultSentimentData = [
   { name: "Positive", value: 68, color: "#10B981" },
   { name: "Neutral", value: 18, color: "#F59E0B" },
   { name: "Negative", value: 14, color: "#EF4444" },
@@ -60,7 +66,7 @@ const defaultThemesData = [
   { theme: "CSV Export Bug", count: 19, sentiment: -0.8 },
 ];
 
-const recentActivity = [
+const defaultRecentActivity = [
   {
     id: "fb-1",
     customer: "Sarah Jenkins (Stripe)",
@@ -92,49 +98,78 @@ const recentActivity = [
 
 export default function DashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const welcomeQuery = searchParams.get("welcome");
   const { data: session } = useSession();
-  const userRole = (session?.user as { role?: string })?.role?.toUpperCase() || "VIEWER";
 
-  // Centralized RBAC Permission Check for AI Themes
+  const userId = (session?.user as { id?: string })?.id || session?.user?.email || "guest";
+  const userRole = (session?.user as { role?: string })?.role?.toUpperCase() || "VIEWER";
   const canViewThemes = hasPermission(userRole, "trends:view");
 
   const [timeRange, setTimeRange] = useState("7d");
-  const [totalVolume, setTotalVolume] = useState(548);
-  const [positiveRatio, setPositiveRatio] = useState("82.4%");
-  const [criticalSpikesCount, setCriticalSpikesCount] = useState(3);
-  const [topThemes, setTopThemes] = useState(defaultThemesData);
+  const [totalVolume, setTotalVolume] = useState<number | null>(null);
+  const [positiveRatio, setPositiveRatio] = useState<string>("0%");
+  const [criticalSpikesCount, setCriticalSpikesCount] = useState<number>(0);
+  const [topThemes, setTopThemes] = useState<Array<{ theme: string; count: number; sentiment: number }>>([]);
+  const [recentFeedbacks, setRecentFeedbacks] = useState<typeof defaultRecentActivity>([]);
+
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
-
-  // RBAC Permission Modal State
+  const [isSingleFeedbackModalOpen, setIsSingleFeedbackModalOpen] = useState(false);
+  const [welcomeModalOpen, setWelcomeModalOpen] = useState(false);
   const [permissionModalOpen, setPermissionModalOpen] = useState(false);
-  const [permissionMessage] = useState("");
-  const [requiredRole] = useState("");
+  const [loadingSeed, setLoadingSeed] = useState(false);
 
+  // Load stats from API
   const fetchStats = useCallback(() => {
     fetch("/api/dashboard/stats")
       .then((res) => (res.ok ? res.json() : null))
       .then((stats) => {
         if (stats) {
-          if (stats.totalVolume) setTotalVolume(stats.totalVolume);
-          if (stats.positiveRatio) setPositiveRatio(stats.positiveRatio);
-          if (stats.criticalSpikesCount !== undefined) setCriticalSpikesCount(stats.criticalSpikesCount);
+          setTotalVolume(stats.totalVolume ?? 0);
+          setPositiveRatio(stats.positiveRatio || "0%");
+          setCriticalSpikesCount(stats.criticalSpikesCount || 0);
+
           if (Array.isArray(stats.themes) && stats.themes.length > 0 && canViewThemes) {
             setTopThemes(
               stats.themes.map((t: { title: string; mentions?: number; count?: number }) => ({
                 theme: t.title,
-                count: t.mentions || t.count || 20,
+                count: t.mentions || t.count || 0,
                 sentiment: 0.8,
               }))
             );
+          } else if (stats.totalVolume > 0 && canViewThemes) {
+            setTopThemes(defaultThemesData);
+          } else {
+            setTopThemes([]);
           }
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setTotalVolume(0);
+      });
   }, [canViewThemes]);
 
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
+
+  // Check if first-time welcome experience should be displayed
+  useEffect(() => {
+    if (welcomeQuery === "true" || (totalVolume === 0 && userId !== "guest")) {
+      const dismissedKey = `loop_welcome_dismissed_${userId}`;
+      const isDismissed = localStorage.getItem(dismissedKey);
+      if (!isDismissed) {
+        setWelcomeModalOpen(true);
+      }
+    }
+  }, [welcomeQuery, totalVolume, userId]);
+
+  const handleDismissWelcome = () => {
+    if (userId) {
+      localStorage.setItem(`loop_welcome_dismissed_${userId}`, "true");
+    }
+    setWelcomeModalOpen(false);
+  };
 
   const handleNavigateThemes = (themeTitle?: string) => {
     if (!canViewThemes) {
@@ -144,6 +179,61 @@ export default function DashboardPage() {
     const url = themeTitle ? `/trends?theme=${encodeURIComponent(themeTitle)}` : "/trends";
     router.push(url);
   };
+
+  // Seed sample demo data into new user's workspace
+  const handleTryDemoData = async () => {
+    setLoadingSeed(true);
+    try {
+      const demoItems = [
+        {
+          content: "Onboarding took 45 minutes because team invite links expired prematurely.",
+          channel: "SUPPORT_TICKET",
+          customerName: "Sarah Jenkins",
+          customerEmail: "sarah@stripe.com",
+          company: "Stripe",
+          rating: 2,
+          category: "UX",
+          priority: "HIGH",
+        },
+        {
+          content: "The new dashboard is gorgeous and page load velocity is sub-50ms!",
+          channel: "APP_STORE_REVIEW",
+          customerName: "David Miller",
+          customerEmail: "david@linear.app",
+          company: "Linear",
+          rating: 5,
+          category: "Performance",
+          priority: "LOW",
+        },
+        {
+          content: "Enterprise prospect requires Okta SSO SAML 2.0 before signing the annual tier.",
+          channel: "SALES_CALL_NOTE",
+          customerName: "Alex Vance",
+          customerEmail: "alex@vercel.com",
+          company: "Vercel",
+          rating: 4,
+          category: "Feature Request",
+          priority: "HIGH",
+        },
+      ];
+
+      const res = await fetch("/api/feedback/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: demoItems }),
+      });
+
+      if (res.ok) {
+        fetchStats();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingSeed(false);
+    }
+  };
+
+  const isWorkspaceEmpty = totalVolume === 0;
 
   return (
     <DashboardLayout>
@@ -207,10 +297,10 @@ export default function DashboardPage() {
               <span>Total Feedback</span>
               <MessageSquare className="w-4 h-4 text-emerald-400" />
             </div>
-            <h3 className="text-3xl font-bold mt-2 text-white">{totalVolume}</h3>
+            <h3 className="text-3xl font-bold mt-2 text-white">{totalVolume ?? 0}</h3>
             <div className="flex items-center gap-1.5 mt-2 text-xs text-emerald-400 font-semibold">
               <TrendingUp className="w-3.5 h-3.5" />
-              <span>+18.4% from last period</span>
+              <span>{isWorkspaceEmpty ? "0% volume change" : "+18.4% from last period"}</span>
             </div>
           </Card>
         </Link>
@@ -222,7 +312,9 @@ export default function DashboardPage() {
               <Smile className="w-4 h-4 text-emerald-400" />
             </div>
             <h3 className="text-3xl font-bold mt-2 text-emerald-400">{positiveRatio}</h3>
-            <p className="text-slate-400 text-xs mt-2">68% Pos / 18% Neu / 14% Neg</p>
+            <p className="text-slate-400 text-xs mt-2">
+              {isWorkspaceEmpty ? "0% Pos / 0% Neu / 0% Neg" : "68% Pos / 18% Neu / 14% Neg"}
+            </p>
           </Card>
         </Link>
 
@@ -233,8 +325,12 @@ export default function DashboardPage() {
                 <span>Active AI Clusters</span>
                 <Layers className="w-4 h-4 text-teal-400" />
               </div>
-              <h3 className="text-3xl font-bold mt-2 text-teal-300">{topThemes.length} Themes</h3>
-              <p className="text-slate-400 text-xs mt-2">2 themes spiking in volume</p>
+              <h3 className="text-3xl font-bold mt-2 text-teal-300">
+                {isWorkspaceEmpty ? 0 : topThemes.length || 5} Themes
+              </h3>
+              <p className="text-slate-400 text-xs mt-2">
+                {isWorkspaceEmpty ? "0 active spikes" : "2 themes spiking in volume"}
+              </p>
             </Card>
           </div>
         )}
@@ -251,198 +347,242 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Main Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Volume Area Chart */}
-        <Card className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-emerald-400" />
-                Feedback Volume & Sentiment Stream
-              </h3>
-              <p className="text-xs text-slate-400">Daily ingested items categorized by sentiment</p>
-            </div>
-            <span className="text-xs text-slate-500 font-mono">LIVE FEED</span>
+      {/* POLISHED EMPTY STATE FOR NEW WORKSPACES */}
+      {isWorkspaceEmpty ? (
+        <Card className="p-10 text-center space-y-6 max-w-3xl mx-auto border-dashed border-slate-800 bg-slate-950/60 my-4">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 mx-auto flex items-center justify-center">
+            <Rocket className="w-8 h-8" />
           </div>
 
-          <div className="h-72 w-full pt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={volumeData}>
-                <defs>
-                  <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="date" stroke="#64748b" fontSize={12} />
-                <YAxis stroke="#64748b" fontSize={12} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#090d16",
-                    borderColor: "#1e293b",
-                    borderRadius: "12px",
-                    color: "#fff",
-                  }}
-                />
-                <Area type="monotone" dataKey="total" stroke="#10B981" strokeWidth={3} fillOpacity={1} fill="url(#colorTotal)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-
-        {/* Sentiment Donut Chart */}
-        <Card className="space-y-4">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2">
-            <Smile className="w-4 h-4 text-teal-400" />
-            Overall Sentiment Ratio
-          </h3>
-          <p className="text-xs text-slate-400">Distribution across all ingested feedback</p>
-
-          <div className="h-56 w-full relative flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={sentimentData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={85}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {sentimentData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#090d16",
-                    borderColor: "#1e293b",
-                    borderRadius: "12px",
-                    color: "#fff",
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-2xl font-extrabold text-white">68%</span>
-              <span className="text-[10px] text-emerald-400 font-semibold uppercase">Positive</span>
-            </div>
+          <div className="space-y-2 max-w-md mx-auto">
+            <h2 className="text-2xl font-bold text-white">Your workspace is ready</h2>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              No customer feedback yet. Start analyzing customer feedback with AI by importing or adding your first feedback item.
+            </p>
           </div>
 
-          <div className="flex justify-around pt-2 text-xs border-t border-slate-800/80">
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
-              <span className="text-slate-300 font-medium">Positive (68%)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-amber-500 inline-block" />
-              <span className="text-slate-300 font-medium">Neutral (18%)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-rose-500 inline-block" />
-              <span className="text-slate-300 font-medium">Negative (14%)</span>
-            </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => setIsCsvModalOpen(true)}
+              className="px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shadow-lg shadow-emerald-500/20 transition flex items-center gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Import Feedback CSV</span>
+            </button>
+
+            <button
+              onClick={() => setIsSingleFeedbackModalOpen(true)}
+              className="px-5 py-3 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 text-white font-bold text-xs transition flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4 text-emerald-400" />
+              <span>Add Single Feedback</span>
+            </button>
+
+            <button
+              onClick={handleTryDemoData}
+              disabled={loadingSeed}
+              className="px-5 py-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-300 font-bold text-xs transition flex items-center gap-2"
+            >
+              <Database className="w-4 h-4 text-teal-400" />
+              <span>{loadingSeed ? "Loading Demo..." : "Try Demo Data"}</span>
+            </button>
           </div>
         </Card>
-      </div>
-
-      {/* Second Row: Top Themes (Protected by RBAC) & Recent Activity */}
-      <div className={`grid grid-cols-1 ${canViewThemes ? "lg:grid-cols-2" : "lg:grid-cols-1"} gap-6`}>
-        {/* Top Themes Bar Chart Widget - Rendered ONLY if canViewThemes is true */}
-        {canViewThemes && (
-          <Card className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Layers className="w-4 h-4 text-emerald-400" />
-                Top AI Theme Clusters
-              </h3>
-              <button
-                onClick={() => handleNavigateThemes()}
-                className="text-xs text-emerald-400 font-semibold hover:underline bg-transparent border-0 cursor-pointer"
-              >
-                View All →
-              </button>
-            </div>
-
-            <div className="h-64 w-full pt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart layout="vertical" data={topThemes} margin={{ left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
-                  <XAxis type="number" stroke="#64748b" fontSize={11} />
-                  <YAxis dataKey="theme" type="category" stroke="#94a3b8" fontSize={11} width={130} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#090d16",
-                      borderColor: "#1e293b",
-                      borderRadius: "12px",
-                      color: "#fff",
-                    }}
-                  />
-                  <Bar
-                    dataKey="count"
-                    fill="#10B981"
-                    radius={[0, 8, 8, 0]}
-                    onClick={() => handleNavigateThemes()}
-                    className="cursor-pointer hover:opacity-80"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-        )}
-
-        {/* Recent Feedback Triage Feed */}
-        <Card className={`space-y-4 ${!canViewThemes ? "lg:col-span-1" : ""}`}>
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-teal-400" />
-              Recent AI Ingested Quotes
-            </h3>
-            <Link href="/feedback" className="text-xs text-emerald-400 font-semibold hover:underline">
-              Inbox →
-            </Link>
-          </div>
-
-          <div className="space-y-3">
-            {recentActivity.map((item) => (
-              <div
-                key={item.id}
-                className="p-4 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-slate-700 transition space-y-2"
-              >
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-200">{item.customer}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-500 font-mono">{item.time}</span>
-                    <span
-                      className={`px-2 py-0.5 rounded-full font-bold ${
-                        item.sentiment === "POS"
-                          ? "bg-emerald-500/20 text-emerald-300"
-                          : item.sentiment === "NEG"
-                          ? "bg-rose-500/20 text-rose-300"
-                          : "bg-amber-500/20 text-amber-300"
-                      }`}
-                    >
-                      {item.sentiment}
-                    </span>
-                  </div>
+      ) : (
+        <>
+          {/* Main Charts Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Volume Area Chart */}
+            <Card className="lg:col-span-2 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-emerald-400" />
+                    Feedback Volume & Sentiment Stream
+                  </h3>
+                  <p className="text-xs text-slate-400">Daily ingested items categorized by sentiment</p>
                 </div>
+                <span className="text-xs text-slate-500 font-mono">LIVE FEED</span>
+              </div>
 
-                <p className="text-xs text-slate-300 italic line-clamp-2">&quot;{item.quote}&quot;</p>
+              <div className="h-72 w-full pt-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={defaultVolumeData}>
+                    <defs>
+                      <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                    <XAxis dataKey="date" stroke="#64748b" fontSize={12} />
+                    <YAxis stroke="#64748b" fontSize={12} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#090d16",
+                        borderColor: "#1e293b",
+                        borderRadius: "12px",
+                        color: "#fff",
+                      }}
+                    />
+                    <Area type="monotone" dataKey="total" stroke="#10B981" strokeWidth={3} fillOpacity={1} fill="url(#colorTotal)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
 
-                <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400">
-                  <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">{item.channel}</span>
-                  <span className="font-mono text-emerald-400 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> Auto-Tagged by AI
-                  </span>
+            {/* Sentiment Donut Chart */}
+            <Card className="space-y-4">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Smile className="w-4 h-4 text-teal-400" />
+                Overall Sentiment Ratio
+              </h3>
+              <p className="text-xs text-slate-400">Distribution across all ingested feedback</p>
+
+              <div className="h-56 w-full relative flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={defaultSentimentData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={85}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {defaultSentimentData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#090d16",
+                        borderColor: "#1e293b",
+                        borderRadius: "12px",
+                        color: "#fff",
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-2xl font-extrabold text-white">68%</span>
+                  <span className="text-[10px] text-emerald-400 font-semibold uppercase">Positive</span>
                 </div>
               </div>
-            ))}
+
+              <div className="flex justify-around pt-2 text-xs border-t border-slate-800/80">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
+                  <span className="text-slate-300 font-medium">Positive (68%)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-amber-500 inline-block" />
+                  <span className="text-slate-300 font-medium">Neutral (18%)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-rose-500 inline-block" />
+                  <span className="text-slate-300 font-medium">Negative (14%)</span>
+                </div>
+              </div>
+            </Card>
           </div>
-        </Card>
-      </div>
+
+          {/* Second Row: Top Themes (Protected by RBAC) & Recent Activity */}
+          <div className={`grid grid-cols-1 ${canViewThemes ? "lg:grid-cols-2" : "lg:grid-cols-1"} gap-6`}>
+            {canViewThemes && (
+              <Card className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-emerald-400" />
+                    Top AI Theme Clusters
+                  </h3>
+                  <button
+                    onClick={() => handleNavigateThemes()}
+                    className="text-xs text-emerald-400 font-semibold hover:underline bg-transparent border-0 cursor-pointer"
+                  >
+                    View All →
+                  </button>
+                </div>
+
+                <div className="h-64 w-full pt-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart layout="vertical" data={topThemes.length > 0 ? topThemes : defaultThemesData} margin={{ left: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+                      <XAxis type="number" stroke="#64748b" fontSize={11} />
+                      <YAxis dataKey="theme" type="category" stroke="#94a3b8" fontSize={11} width={130} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "#090d16",
+                          borderColor: "#1e293b",
+                          borderRadius: "12px",
+                          color: "#fff",
+                        }}
+                      />
+                      <Bar
+                        dataKey="count"
+                        fill="#10B981"
+                        radius={[0, 8, 8, 0]}
+                        onClick={() => handleNavigateThemes()}
+                        className="cursor-pointer hover:opacity-80"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+            )}
+
+            {/* Recent Feedback Triage Feed */}
+            <Card className={`space-y-4 ${!canViewThemes ? "lg:col-span-1" : ""}`}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-teal-400" />
+                  Recent AI Ingested Quotes
+                </h3>
+                <Link href="/feedback" className="text-xs text-emerald-400 font-semibold hover:underline">
+                  Inbox →
+                </Link>
+              </div>
+
+              <div className="space-y-3">
+                {defaultRecentActivity.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-4 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-slate-700 transition space-y-2"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-200">{item.customer}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-500 font-mono">{item.time}</span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full font-bold ${
+                            item.sentiment === "POS"
+                              ? "bg-emerald-500/20 text-emerald-300"
+                              : item.sentiment === "NEG"
+                              ? "bg-rose-500/20 text-rose-300"
+                              : "bg-amber-500/20 text-amber-300"
+                          }`}
+                        >
+                          {item.sentiment}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-slate-300 italic line-clamp-2">&quot;{item.quote}&quot;</p>
+
+                    <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400">
+                      <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">{item.channel}</span>
+                      <span className="font-mono text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Auto-Tagged by AI
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+        </>
+      )}
 
       {/* Shared CSV Upload Modal */}
       <CSVUploadModal
@@ -453,13 +593,70 @@ export default function DashboardPage() {
         }}
       />
 
+      {/* Manual Single Feedback Modal */}
+      <FeedbackModal
+        isOpen={isSingleFeedbackModalOpen}
+        onClose={() => setIsSingleFeedbackModalOpen(false)}
+        onSuccess={() => {
+          fetchStats();
+        }}
+      />
+
       {/* Permission Restricted Alert Modal */}
       <PermissionModal
         isOpen={permissionModalOpen}
         onClose={() => setPermissionModalOpen(false)}
-        message={permissionMessage}
-        requiredRole={requiredRole}
+        message="Permission restricted"
+        requiredRole="ADMIN"
       />
+
+      {/* AUTOMATIC WELCOME EXPERIENCE MODAL */}
+      <Modal
+        isOpen={welcomeModalOpen}
+        onClose={handleDismissWelcome}
+        title="Welcome to LOOP AI"
+      >
+        <div className="space-y-6 text-slate-300 text-xs">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/30">
+            <Sparkles className="w-7 h-7" />
+          </div>
+
+          <div className="text-center space-y-2">
+            <h3 className="text-xl font-bold text-white">Your workspace is ready</h3>
+            <p className="text-slate-400 text-sm leading-relaxed max-w-sm mx-auto">
+              Start analyzing customer feedback with AI. Ingest support tickets, App Store reviews, and call notes to uncover real-time intelligence.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-white text-xs">
+                <Upload className="w-4 h-4 text-emerald-400" />
+                <span>Bulk CSV Ingestion</span>
+              </div>
+              <p className="text-[11px] text-slate-400">Import multi-channel feedback in seconds.</p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-white text-xs">
+                <Sparkles className="w-4 h-4 text-teal-400" />
+                <span>Ask LOOP RAG</span>
+              </div>
+              <p className="text-[11px] text-slate-400">Conversational AI grounded in customer quotes.</p>
+            </div>
+          </div>
+
+          <div className="flex justify-center pt-2">
+            <button
+              onClick={handleDismissWelcome}
+              className="w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs transition shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
+            >
+              <span>Get Started</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </Modal>
     </DashboardLayout>
   );
 }

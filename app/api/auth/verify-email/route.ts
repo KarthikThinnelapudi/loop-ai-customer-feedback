@@ -7,7 +7,9 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const verifyEmailSchema = z.object({
-  token: z.string().min(1, "Token is required"),
+  token: z.string().optional(),
+  otp: z.string().optional(),
+  email: z.string().optional(),
 });
 
 export async function POST(req: Request) {
@@ -17,32 +19,44 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { token } = verifyEmailSchema.parse(body);
+    const { token, otp, email } = verifyEmailSchema.parse(body);
 
-    const verificationToken = await db.verificationToken.findFirst({
-      where: { token },
-    });
+    let verificationToken = null;
+
+    if (otp && email) {
+      const normalizedEmail = email.trim().toLowerCase();
+      verificationToken = await db.verificationToken.findFirst({
+        where: {
+          identifier: normalizedEmail,
+          token: otp.trim(),
+        },
+      });
+    } else if (token) {
+      verificationToken = await db.verificationToken.findFirst({
+        where: { token: token.trim() },
+      });
+    }
 
     if (!verificationToken) {
       return NextResponse.json(
-        { message: "Invalid or expired verification token. Please request a new link." },
+        { message: "Invalid verification OTP code or token. Please check your email or resend code." },
         { status: 400, headers }
       );
     }
 
     if (verificationToken.expires < new Date()) {
       return NextResponse.json(
-        { message: "Verification token has expired. Please request a new link." },
+        { message: "Verification OTP code has expired. Please request a new code." },
         { status: 400, headers }
       );
     }
 
-    const email = verificationToken.identifier;
+    const targetEmail = verificationToken.identifier;
 
-    // Activate user account & delete single-use token atomically
+    // Activate user account & delete single-use tokens atomically
     const updatedUser = await db.$transaction(async (tx) => {
       const user = await tx.user.update({
-        where: { email },
+        where: { email: targetEmail },
         data: {
           emailVerified: new Date(),
           isVerified: true,
@@ -50,7 +64,7 @@ export async function POST(req: Request) {
       });
 
       await tx.verificationToken.deleteMany({
-        where: { identifier: email },
+        where: { identifier: targetEmail },
       });
 
       return user;
@@ -60,7 +74,7 @@ export async function POST(req: Request) {
     try {
       const baseUrl = process.env.NEXTAUTH_URL || "https://customerloop.in";
       await sendWelcomeEmail({
-        to: email,
+        to: targetEmail,
         name: updatedUser.name || "Customer",
         dashboardUrl: `${baseUrl}/dashboard`,
       });
@@ -69,7 +83,11 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json(
-      { message: "Email verified successfully! Welcome to LOOP AI." },
+      {
+        message: "Email verified successfully! Welcome to LOOP AI.",
+        isVerified: true,
+        email: targetEmail,
+      },
       { status: 200, headers }
     );
   } catch (error) {

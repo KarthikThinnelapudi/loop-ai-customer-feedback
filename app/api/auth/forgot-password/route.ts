@@ -27,11 +27,12 @@ export async function POST(req: Request) {
     if (!user) {
       // Prevent email enumeration attack
       return NextResponse.json(
-        { message: "If an account with that email exists, we have sent a password reset link." },
+        { message: "If an account with that email exists, we have sent a password reset verification code." },
         { status: 200, headers }
       );
     }
 
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const tokenStr = "reset_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
     // Remove previous reset tokens for this user
@@ -39,11 +40,20 @@ export async function POST(req: Request) {
       where: { identifier: normalizedEmail },
     });
 
-    // Create 1-hour reset token
+    // Save link token
     await db.verificationToken.create({
       data: {
         identifier: normalizedEmail,
         token: tokenStr,
+        expires: new Date(Date.now() + 3600 * 1000), // 1 Hour Expiration
+      },
+    });
+
+    // Save 6-digit OTP token
+    await db.verificationToken.create({
+      data: {
+        identifier: normalizedEmail,
+        token: otpCode,
         expires: new Date(Date.now() + 3600 * 1000), // 1 Hour Expiration
       },
     });
@@ -59,7 +69,11 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json(
-      { message: "If an account with that email exists, we have sent a password reset link." },
+      {
+        message: "If an account with that email exists, we have sent a password reset verification code.",
+        email: normalizedEmail,
+        otpCode, // Provided for dev testing visibility
+      },
       { status: 200, headers }
     );
   } catch (error) {
