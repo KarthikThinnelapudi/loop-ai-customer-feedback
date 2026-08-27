@@ -19,6 +19,7 @@ import {
   FileText,
   Bot,
   Users,
+  Menu,
 } from "lucide-react";
 import { useDismissablePanel } from "@/hooks/useDismissablePanel";
 import { hasPermission } from "@/lib/rbac";
@@ -73,8 +74,10 @@ const mockNotifications: NotificationItem[] = [
 
 export default function Topbar({
   onOpenNewFeedback,
+  onOpenMobileNav,
 }: {
   onOpenNewFeedback?: () => void;
+  onOpenMobileNav?: () => void;
 }) {
   const router = useRouter();
   const { data: session } = useSession();
@@ -198,20 +201,30 @@ export default function Topbar({
   };
 
   return (
-    <header className="h-20 border-b border-slate-800/80 bg-slate-950/60 backdrop-blur-xl px-6 md:px-8 flex items-center justify-between sticky top-0 z-20">
-      {/* Search Trigger Button */}
-      <div className="flex items-center gap-4">
+    <header className="h-20 border-b border-slate-800/80 bg-slate-950/60 backdrop-blur-xl px-4 md:px-8 flex items-center justify-between sticky top-0 z-20">
+      {/* Mobile Hamburger Toggle & Search */}
+      <div className="flex items-center gap-3">
+        {onOpenMobileNav && (
+          <button
+            onClick={onOpenMobileNav}
+            aria-label="Open mobile menu"
+            className="md:hidden p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white transition"
+          >
+            <Menu className="w-5 h-5 text-emerald-400" />
+          </button>
+        )}
+
         <button
           onClick={() => openPanel("search")}
           aria-label="Search workspace"
-          className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border text-slate-400 transition w-56 sm:w-72 md:w-80 ${
+          className={`flex items-center gap-3 px-3 sm:px-4 py-2.5 rounded-xl border text-slate-400 transition w-44 sm:w-72 md:w-80 ${
             isSearchOpen
               ? "bg-slate-900 border-emerald-500 text-white ring-2 ring-emerald-500/20"
               : "bg-slate-900/80 border-slate-800 hover:text-slate-200 hover:border-slate-700"
           }`}
         >
-          <Search className="w-4 h-4 text-slate-500" />
-          <span className="text-sm font-normal truncate">Search quotes, themes, reports...</span>
+          <Search className="w-4 h-4 text-slate-500 shrink-0" />
+          <span className="text-xs sm:text-sm font-normal truncate">Search quotes, themes, reports...</span>
           <kbd className="ml-auto text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700 font-mono hidden sm:flex items-center gap-1">
             <Command className="w-3 h-3" /> K
           </kbd>
@@ -219,7 +232,7 @@ export default function Topbar({
       </div>
 
       {/* Topbar Actions & User Badge */}
-      <div className="flex items-center gap-3 md:gap-4">
+      <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
         <span className="hidden lg:inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 font-medium">
           <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
           AI Grounding Active
@@ -228,7 +241,7 @@ export default function Topbar({
         {onOpenNewFeedback && (
           <button
             onClick={onOpenNewFeedback}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-semibold text-xs shadow-[0_0_20px_rgba(16,185,129,0.25)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)] transition"
+            className="flex items-center gap-2 px-3 sm:px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-semibold text-xs shadow-[0_0_20px_rgba(16,185,129,0.25)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)] transition"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Ingest Feedback</span>
@@ -242,7 +255,7 @@ export default function Topbar({
           <button
             onClick={() => openPanel("notif")}
             aria-label="Notifications"
-            className={`p-2.5 rounded-xl border transition relative ${
+            className={`p-2 sm:p-2.5 rounded-xl border transition relative ${
               isNotifOpen
                 ? "bg-slate-900 border-emerald-500 text-white ring-2 ring-emerald-500/20"
                 : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"

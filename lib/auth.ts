@@ -46,13 +46,16 @@ const providers: NextAuthOptions["providers"] = [
           if (isPasswordValid || isDemoPassword) {
             const primaryMembership = user.memberships[0];
             const userRole = primaryMembership?.role || (normalizedEmail.includes("analyst") ? "ANALYST" : normalizedEmail.includes("viewer") ? "VIEWER" : "ADMIN");
+            const workspaceName = primaryMembership?.workspace?.name || (isDemoAccount ? "Acme Production Workspace" : "My Workspace");
+            const workspaceId = primaryMembership?.workspaceId || "ws_acme_prod_9921";
 
             return {
               id: user.id,
               name: user.name || normalizedEmail.split("@")[0],
               email: user.email,
               role: userRole,
-              workspaceId: primaryMembership?.workspaceId || "ws_acme_prod_9921",
+              workspaceId,
+              workspaceName,
             };
           }
         }
@@ -76,10 +79,10 @@ const providers: NextAuthOptions["providers"] = [
             email: normalizedEmail,
             role,
             workspaceId: "ws_acme_prod_9921",
+            workspaceName: "Acme Production Workspace",
           };
         }
       }
-
 
       return null;
     },
@@ -168,6 +171,7 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.role = (user as { role?: string }).role || "ADMIN";
         token.workspaceId = (user as { workspaceId?: string }).workspaceId || "ws_acme_prod_9921";
+        token.workspaceName = (user as { workspaceName?: string }).workspaceName || "Acme Production Workspace";
       }
       return token;
     },
@@ -176,6 +180,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as { id?: string }).id = token.id as string;
         (session.user as { role?: string }).role = token.role as string;
         (session.user as { workspaceId?: string }).workspaceId = token.workspaceId as string;
+        (session.user as { workspaceName?: string }).workspaceName = token.workspaceName as string;
       }
       return session;
     },

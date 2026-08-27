@@ -19,6 +19,7 @@ import {
   ChevronRight,
   LogOut,
   Building,
+  X,
 } from "lucide-react";
 
 import LoopLogo from "@/app/components/logo/LoopLogo";
@@ -38,27 +39,30 @@ const allWorkspaceItems = [
   { label: "Workspace Settings", href: "/settings", icon: Settings, roles: ["ADMIN", "OWNER", "MANAGER"] },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({
+  mobileOpen = false,
+  onCloseMobile,
+}: {
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
+}) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const { data: session } = useSession();
 
   const userRole = (session?.user as { role?: string })?.role?.toUpperCase() || "ADMIN";
+  const workspaceName = (session?.user as { workspaceName?: string })?.workspaceName || "Acme Production Workspace";
 
   const navItems = allNavItems.filter((item) => item.roles.includes(userRole));
   const workspaceItems = allWorkspaceItems.filter((item) => item.roles.includes(userRole));
 
-  return (
-    <aside
-      className={`sticky top-0 h-screen bg-slate-950 border-r border-slate-800/80 flex flex-col justify-between transition-all duration-300 z-30 shrink-0 ${
-        collapsed ? "w-20" : "w-64"
-      }`}
-    >
+  const sidebarContent = (
+    <div className="flex flex-col justify-between h-full">
       <div>
         {/* Logo & Collapse Toggle */}
         <div className="h-20 px-5 flex items-center justify-between border-b border-slate-800/80">
           {!collapsed ? (
-            <Link href="/dashboard">
+            <Link href="/dashboard" onClick={onCloseMobile}>
               <LoopLogo />
             </Link>
           ) : (
@@ -67,12 +71,23 @@ export default function Sidebar() {
             </div>
           )}
 
+          {/* Desktop Collapse Toggle */}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition"
+            className="hidden md:flex p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition"
           >
             {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
           </button>
+
+          {/* Mobile Close Button */}
+          {onCloseMobile && (
+            <button
+              onClick={onCloseMobile}
+              className="md:hidden p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Workspace Switcher Pill */}
@@ -83,7 +98,7 @@ export default function Sidebar() {
                 <Building className="w-4 h-4" />
               </div>
               <div className="truncate">
-                <p className="text-xs font-semibold text-white truncate">Acme Production</p>
+                <p className="text-xs font-semibold text-white truncate">{workspaceName}</p>
                 <p className="text-[10px] text-emerald-400 font-mono font-bold">{userRole} ROLE</p>
               </div>
             </div>
@@ -105,6 +120,7 @@ export default function Sidebar() {
               <Link
                 key={item.label}
                 href={item.href}
+                onClick={onCloseMobile}
                 className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   isActive
                     ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.15)]"
@@ -146,6 +162,7 @@ export default function Sidebar() {
               <Link
                 key={item.label}
                 href={item.href}
+                onClick={onCloseMobile}
                 className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   isActive
                     ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
@@ -190,6 +207,29 @@ export default function Sidebar() {
           )}
         </div>
       </div>
-    </aside>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop Fixed Sidebar */}
+      <aside
+        className={`hidden md:flex sticky top-0 h-screen bg-slate-950 border-r border-slate-800/80 flex-col justify-between transition-all duration-300 z-30 shrink-0 ${
+          collapsed ? "w-20" : "w-64"
+        }`}
+      >
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile Drawer Overlay */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onCloseMobile} />
+          <div className="relative w-72 max-w-[80vw] bg-slate-950 h-full border-r border-slate-800 z-50 shadow-2xl overflow-y-auto">
+            {sidebarContent}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

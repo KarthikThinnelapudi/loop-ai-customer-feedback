@@ -5,8 +5,10 @@ import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
+import EmptyState from "@/components/common/EmptyState";
+import CSVUploadModal from "@/components/feedback/CSVUploadModal";
 import { hasPermission } from "@/lib/rbac";
-import { TrendingUp, AlertTriangle, Layers, ChevronRight, ShieldAlert } from "lucide-react";
+import { TrendingUp, AlertTriangle, Layers, ChevronRight, ShieldAlert, Upload } from "lucide-react";
 
 interface SpikingTheme {
   id: string;
@@ -17,7 +19,7 @@ interface SpikingTheme {
   quotes: string[];
 }
 
-const themeTrendsData: SpikingTheme[] = [
+const defaultThemeTrendsData: SpikingTheme[] = [
   {
     id: "th-1",
     name: "Onboarding Friction",
@@ -67,21 +69,36 @@ const themeTrendsData: SpikingTheme[] = [
 function TrendsContent() {
   const { data: session } = useSession();
   const userRole = (session?.user as { role?: string })?.role?.toUpperCase() || "VIEWER";
-
   const canViewTrends = hasPermission(userRole, "trends:view");
 
   const searchParams = useSearchParams();
   const themeParam = searchParams.get("theme");
-  const [selectedTheme, setSelectedTheme] = useState<SpikingTheme | null>(themeTrendsData[0]);
+
+  const [totalVolume, setTotalVolume] = useState<number | null>(null);
+  const [selectedTheme, setSelectedTheme] = useState<SpikingTheme | null>(null);
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
 
   useEffect(() => {
-    if (themeParam) {
-      const match = themeTrendsData.find((t) => t.name.toLowerCase() === themeParam.toLowerCase());
+    fetch("/api/dashboard/stats")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((stats) => {
+        if (stats) {
+          setTotalVolume(stats.totalVolume ?? 0);
+        }
+      })
+      .catch(() => setTotalVolume(0));
+  }, []);
+
+  useEffect(() => {
+    if (themeParam && totalVolume !== 0) {
+      const match = defaultThemeTrendsData.find((t) => t.name.toLowerCase() === themeParam.toLowerCase());
       if (match) {
         setSelectedTheme(match);
       }
+    } else if (totalVolume !== 0) {
+      setSelectedTheme(defaultThemeTrendsData[0]);
     }
-  }, [themeParam]);
+  }, [themeParam, totalVolume]);
 
   if (!canViewTrends) {
     return (
@@ -111,6 +128,8 @@ function TrendsContent() {
     );
   }
 
+  const isWorkspaceEmpty = totalVolume === 0;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
@@ -124,101 +143,121 @@ function TrendsContent() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono px-3 py-1.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30">
-          <AlertTriangle className="w-4 h-4" />
-          <span>2 Active Spikes Detected</span>
+        <div className="flex items-center gap-2 text-xs font-mono px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+          <AlertTriangle className="w-4 h-4 text-emerald-400" />
+          <span>{isWorkspaceEmpty ? "0 Active Spikes • 0 Tracked Themes" : "2 Active Spikes Detected"}</span>
         </div>
       </div>
 
-      {/* Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Theme List */}
-        <div className="space-y-4">
-          <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider font-mono">
-            Tracked Theme Clusters ({themeTrendsData.length})
-          </h3>
+      {isWorkspaceEmpty ? (
+        <Card className="p-12 text-center">
+          <EmptyState
+            title="Trends Will Appear When Your Workspace Has Enough Feedback"
+            description="Import or submit customer feedback to automatically detect spiking friction themes, theme growth rates, and emerging customer pain points."
+            actionLabel="Ingest Customer Feedback"
+            onAction={() => setIsCsvModalOpen(true)}
+          />
+        </Card>
+      ) : (
+        /* Grid Layout for Populated Workspaces */
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column: Theme List */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider font-mono">
+              Tracked Theme Clusters ({defaultThemeTrendsData.length})
+            </h3>
 
-          {themeTrendsData.map((t) => {
-            const isSelected = selectedTheme?.id === t.id;
-            return (
-              <div
-                key={t.id}
-                onClick={() => setSelectedTheme(t)}
-                className={`p-5 rounded-2xl border transition cursor-pointer space-y-2 ${
-                  isSelected
-                    ? "bg-slate-900 border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.15)]"
-                    : "bg-slate-950/80 border-slate-800 hover:border-slate-700"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <h4 className="text-base font-bold text-white flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-emerald-400" />
-                    {t.name}
-                  </h4>
-                  <ChevronRight className={`w-4 h-4 text-slate-500 transition ${isSelected ? "text-emerald-400 translate-x-1" : ""}`} />
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-xs text-slate-400">{t.count} Mentions</span>
-                  <span
-                    className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
-                      t.isSpike
-                        ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
-                        : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                    }`}
-                  >
-                    {t.growth}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Right Column: Theme Drill-Down Details */}
-        <div className="lg:col-span-2">
-          {selectedTheme ? (
-            <Card className="space-y-6">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                    <span>{selectedTheme.name}</span>
-                    {selectedTheme.isSpike && (
-                      <span className="text-xs px-3 py-1 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 font-mono">
-                        CRITICAL SPIKE
-                      </span>
-                    )}
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {selectedTheme.count} feedback items clustered • Velocity: {selectedTheme.growth}
-                  </p>
-                </div>
-              </div>
-
-              {/* Quotes Drill-down */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">
-                  Sample Customer Quotes in Cluster ({selectedTheme.quotes.length})
-                </h4>
-
-                {selectedTheme.quotes.map((q, idx) => (
-                  <div key={idx} className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                    <p className="text-xs text-slate-300 italic">&quot;{q}&quot;</p>
-                    <div className="flex items-center justify-between pt-1 text-[10px] text-slate-500">
-                      <span>Verified Customer Quote</span>
-                      <span className="text-emerald-400 font-mono">Confidence: 94.2%</span>
-                    </div>
+            {defaultThemeTrendsData.map((t) => {
+              const isSelected = selectedTheme?.id === t.id;
+              return (
+                <div
+                  key={t.id}
+                  onClick={() => setSelectedTheme(t)}
+                  className={`p-5 rounded-2xl border transition cursor-pointer space-y-2 ${
+                    isSelected
+                      ? "bg-slate-900 border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.15)]"
+                      : "bg-slate-950/80 border-slate-800 hover:border-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-base font-bold text-white flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-emerald-400" />
+                      {t.name}
+                    </h4>
+                    <ChevronRight className={`w-4 h-4 text-slate-500 transition ${isSelected ? "text-emerald-400 translate-x-1" : ""}`} />
                   </div>
-                ))}
-              </div>
-            </Card>
-          ) : (
-            <Card className="p-12 text-center text-slate-400">
-              Select a theme from the left to view quote drill-downs.
-            </Card>
-          )}
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-xs text-slate-400">{t.count} Mentions</span>
+                    <span
+                      className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
+                        t.isSpike
+                          ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                          : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                      }`}
+                    >
+                      {t.growth}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Right Column: Theme Drill-Down Details */}
+          <div className="lg:col-span-2">
+            {selectedTheme ? (
+              <Card className="space-y-6">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                      <span>{selectedTheme.name}</span>
+                      {selectedTheme.isSpike && (
+                        <span className="text-xs px-3 py-1 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 font-mono">
+                          CRITICAL SPIKE
+                        </span>
+                      )}
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {selectedTheme.count} feedback items clustered • Velocity: {selectedTheme.growth}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Quotes Drill-down */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">
+                    Sample Customer Quotes in Cluster ({selectedTheme.quotes.length})
+                  </h4>
+
+                  {selectedTheme.quotes.map((q, idx) => (
+                    <div key={idx} className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                      <p className="text-xs text-slate-300 italic">&quot;{q}&quot;</p>
+                      <div className="flex items-center justify-between pt-1 text-[10px] text-slate-500">
+                        <span>Verified Customer Quote</span>
+                        <span className="text-emerald-400 font-mono font-bold">Grounded Evidence</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ) : (
+              <Card className="p-12 text-center text-slate-400">
+                Select a theme from the left to view quote drill-downs.
+              </Card>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Shared CSV Upload Modal */}
+      <CSVUploadModal
+        isOpen={isCsvModalOpen}
+        onClose={() => setIsCsvModalOpen(false)}
+        onSuccess={() => {
+          setTotalVolume(1);
+        }}
+      />
     </div>
   );
 }

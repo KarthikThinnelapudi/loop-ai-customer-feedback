@@ -6,18 +6,21 @@ import Topbar from "./Topbar";
 import Breadcrumb from "./Breadcrumb";
 import Modal from "../common/Modal";
 import SessionTimeoutModal from "../auth/SessionTimeoutModal";
-import { Sparkles, Upload } from "lucide-react";
-
+import CSVUploadModal from "../feedback/CSVUploadModal";
+import FeedbackModal from "../feedback/FeedbackModal";
+import { Sparkles } from "lucide-react";
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [showIngestModal, setShowIngestModal] = useState(false);
+  const [showCsvModal, setShowCsvModal] = useState(false);
+  const [showSingleModal, setShowSingleModal] = useState(false);
+
   const [ingestType, setIngestType] = useState<"single" | "csv" | "simulated">("single");
-  const [content, setContent] = useState("");
-  const [channel, setChannel] = useState("SUPPORT_TICKET");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -30,33 +33,34 @@ export default function DashboardLayout({
       setTimeout(() => {
         setSuccess(false);
         setShowIngestModal(false);
-        setContent("");
       }, 1200);
     }, 1000);
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex relative overflow-hidden">
+    <div className="min-h-screen bg-slate-950 text-white flex relative overflow-x-hidden">
       {/* Session Inactivity Warning Modal */}
       <SessionTimeoutModal />
 
-      {/* Sidebar */}
-      <Sidebar />
-
+      {/* Responsive Sidebar (Desktop & Mobile Drawer) */}
+      <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Topbar */}
-        <Topbar onOpenNewFeedback={() => setShowIngestModal(true)} />
+        {/* Topbar with Mobile Navigation Trigger */}
+        <Topbar
+          onOpenNewFeedback={() => setShowIngestModal(true)}
+          onOpenMobileNav={() => setMobileOpen(true)}
+        />
 
         {/* Content Container */}
-        <main className="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full space-y-6">
+        <main className="flex-1 p-4 md:p-8 lg:p-10 max-w-7xl mx-auto w-full space-y-6">
           <Breadcrumb />
           {children}
         </main>
       </div>
 
-      {/* Ingest Feedback Modal */}
+      {/* Ingest Feedback Selection Modal */}
       <Modal
         isOpen={showIngestModal}
         onClose={() => setShowIngestModal(false)}
@@ -76,12 +80,11 @@ export default function DashboardLayout({
               Single Entry
             </button>
             <button
-              onClick={() => setIngestType("csv")}
-              className={`pb-2 border-b-2 transition ${
-                ingestType === "csv"
-                  ? "border-emerald-500 text-emerald-400"
-                  : "border-transparent text-slate-400 hover:text-slate-200"
-              }`}
+              onClick={() => {
+                setShowIngestModal(false);
+                setShowCsvModal(true);
+              }}
+              className="pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition"
             >
               CSV Bulk Upload
             </button>
@@ -93,7 +96,7 @@ export default function DashboardLayout({
                   : "border-transparent text-slate-400 hover:text-slate-200"
               }`}
             >
-              Simulate Channel Stream
+              Simulate Stream
             </button>
           </div>
 
@@ -102,86 +105,56 @@ export default function DashboardLayout({
               <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center font-bold">
                 ✓
               </div>
-              <h4 className="text-lg font-bold text-white">Feedback Queued for AI Classification!</h4>
+              <h4 className="text-lg font-bold text-white">Feedback Ingestion Complete</h4>
               <p className="text-xs text-slate-400">
-                Item parsed and stored. Sentiment scoring and theme clustering triggered in background.
+                Item parsed and stored. Sentiment scoring and theme clustering updated in real-time.
               </p>
             </div>
           ) : ingestType === "single" ? (
-            <form onSubmit={handleIngest} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  Feedback Channel
-                </label>
-                <select
-                  value={channel}
-                  onChange={(e) => setChannel(e.target.value)}
-                  className="w-full py-2.5 px-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="SUPPORT_TICKET">Support Ticket / Intercom</option>
-                  <option value="APP_STORE_REVIEW">App Store / Play Store Review</option>
-                  <option value="NPS_SURVEY">NPS Free-Text Survey</option>
-                  <option value="SALES_CALL_NOTE">Sales & Success Call Note</option>
-                  <option value="COMMUNITY_POST">Community Post / Discord</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  Customer Quote Content
-                </label>
-                <textarea
-                  required
-                  rows={4}
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="Paste raw customer feedback text here..."
-                  className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 placeholder-slate-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowIngestModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold transition shadow-[0_0_20px_rgba(16,185,129,0.2)]"
-                >
-                  {loading ? "Processing..." : "Submit & Run AI Tagging"}
-                </button>
-              </div>
-            </form>
-          ) : ingestType === "csv" ? (
-            <div className="p-8 border-2 border-dashed border-slate-800 rounded-2xl text-center space-y-3 hover:border-emerald-500/50 transition cursor-pointer">
-              <Upload className="w-8 h-8 text-emerald-400 mx-auto" />
-              <p className="text-sm font-semibold text-slate-200">Drag & Drop CSV File Here</p>
-              <p className="text-xs text-slate-500">Columns supported: content, channel, customer_label, created_at</p>
-              <button className="px-4 py-2 bg-slate-800 text-xs font-semibold text-slate-200 rounded-xl hover:bg-slate-700 transition">
-                Browse Files
+            <div className="space-y-4">
+              <p className="text-xs text-slate-400">
+                Add a single raw customer feedback quote from support tickets, app store reviews, or sales call notes.
+              </p>
+              <button
+                onClick={() => {
+                  setShowIngestModal(false);
+                  setShowSingleModal(true);
+                }}
+                className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shadow-md transition"
+              >
+                Open Single Entry Form
               </button>
             </div>
           ) : (
             <div className="space-y-4">
               <p className="text-xs text-slate-400">
-                Click below to simulate streaming 25 realistic multi-channel feedback records into your workspace for instant demoing.
+                Simulate streaming multi-channel customer feedback records into your active workspace.
               </p>
               <button
                 onClick={handleIngest}
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold text-xs shadow-lg flex items-center justify-center gap-2"
               >
                 <Sparkles className="w-4 h-4" />
-                <span>Inject 25 Simulated Integration Items</span>
+                <span>{loading ? "Ingesting..." : "Simulate Stream Items"}</span>
               </button>
             </div>
           )}
         </div>
       </Modal>
+
+      {/* Consolidated CSV Modal */}
+      <CSVUploadModal
+        isOpen={showCsvModal}
+        onClose={() => setShowCsvModal(false)}
+        onSuccess={() => {}}
+      />
+
+      {/* Manual Single Entry Modal */}
+      <FeedbackModal
+        isOpen={showSingleModal}
+        onClose={() => setShowSingleModal(false)}
+        onSuccess={() => {}}
+      />
     </div>
   );
 }

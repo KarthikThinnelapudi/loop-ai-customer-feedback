@@ -46,49 +46,6 @@ interface FeedbackItem {
   rationale: string;
 }
 
-const mockFeedbackData: FeedbackItem[] = [
-  {
-    id: "fb-101",
-    content: "Onboarding took forever — I couldn't figure out how to invite my team. The docs were outdated.",
-    channel: "SUPPORT_TICKET",
-    customerName: "Sarah Jenkins",
-    customerEmail: "sarah@stripe.com",
-    customerLabel: "Sarah Jenkins (Stripe)",
-    company: "Stripe",
-    rating: 2,
-    category: "UX",
-    priority: "HIGH",
-    product: "Core Platform",
-    sentiment: "NEG",
-    sentimentScore: -0.85,
-    status: "NEW",
-    featureArea: "Onboarding",
-    themes: ["Onboarding Friction", "Documentation"],
-    createdAt: "2026-07-28 14:30",
-    rationale: "Customer expresses frustration with team invite flow latency and outdated documentation.",
-  },
-  {
-    id: "fb-102",
-    content: "The new dashboard is gorgeous and finally fast. Huge performance improvement on v2 release!",
-    channel: "APP_STORE_REVIEW",
-    customerName: "David Miller",
-    customerEmail: "david@linear.app",
-    customerLabel: "David Miller (Linear)",
-    company: "Linear",
-    rating: 5,
-    category: "Performance",
-    priority: "LOW",
-    product: "Dashboard",
-    sentiment: "POS",
-    sentimentScore: 0.92,
-    status: "REVIEWED",
-    featureArea: "Dashboard",
-    themes: ["Dashboard Speed", "UI Aesthetics"],
-    createdAt: "2026-07-28 12:15",
-    rationale: "High satisfaction praised regarding dashboard loading velocity and visual redesign.",
-  },
-];
-
 export default function FeedbackInboxPage() {
   const { data: session } = useSession();
   const userRole = (session?.user as { role?: string })?.role?.toUpperCase() || "VIEWER";
@@ -104,18 +61,20 @@ export default function FeedbackInboxPage() {
   const [selectedStatus, setSelectedStatus] = useState("ALL");
   const [selectedItem, setSelectedItem] = useState<FeedbackItem | null>(null);
   const [editingItem, setEditingItem] = useState<FeedbackFormValues | null>(null);
-  const [data, setData] = useState<FeedbackItem[]>(mockFeedbackData);
+  const [data, setData] = useState<FeedbackItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isCSVModalOpen, setIsCSVModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   const fetchFeedback = () => {
+    setLoading(true);
     fetch("/api/feedback")
       .then((res) => (res.ok ? res.json() : null))
       .then((resData) => {
         const apiData = resData?.data || resData;
-        if (Array.isArray(apiData) && apiData.length > 0) {
+        if (Array.isArray(apiData)) {
           const mapped = apiData.map((item: {
             id: string;
             content: string;
@@ -155,9 +114,8 @@ export default function FeedbackInboxPage() {
           setData(mapped);
         }
       })
-      .catch(() => {
-        // Fallback to initial mock data if offline
-      });
+      .catch(() => {})
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
@@ -348,18 +306,18 @@ export default function FeedbackInboxPage() {
         </div>
       </Card>
 
-      {/* Feedback Table */}
+      {/* Feedback Table / Empty State */}
       <Card className="p-0 overflow-hidden">
-        {filteredData.length === 0 ? (
+        {loading ? (
+          <div className="p-12 text-center text-slate-400 font-mono text-xs">
+            Loading feedback items...
+          </div>
+        ) : filteredData.length === 0 ? (
           <EmptyState
-            title="No Matching Feedback"
-            description="Try clearing your search term or sentiment filter parameters."
-            actionLabel="Reset Filters"
-            onAction={() => {
-              setSearch("");
-              setSelectedSentiment("ALL");
-              setSelectedStatus("ALL");
-            }}
+            title="No Customer Feedback Yet"
+            description="Import a CSV file or add a new feedback item to begin discovering Voice of Customer themes and AI insights."
+            actionLabel={canCreate ? "Add Feedback" : undefined}
+            onAction={canCreate ? () => setIsCreateModalOpen(true) : undefined}
           />
         ) : (
           <div className="overflow-x-auto">
