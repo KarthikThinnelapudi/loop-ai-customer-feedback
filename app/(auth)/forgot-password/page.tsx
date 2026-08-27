@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Mail, ArrowRight, CheckCircle2, AlertCircle, RefreshCw, KeyRound, ArrowLeft } from "lucide-react";
+import { Mail, ArrowRight, CheckCircle2, AlertCircle, RefreshCw, KeyRound, ArrowLeft, Clock } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -17,20 +17,47 @@ export default function ForgotPasswordPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [resending, setResending] = useState(false);
   const [resentNotice, setResentNotice] = useState(false);
-  const [countdown, setCountdown] = useState(60);
+  
+  // 60s resend cooldown timer
+  const [resendCountdown, setResendCountdown] = useState(60);
   const [canResend, setCanResend] = useState(false);
+
+  // 10-minute (600s) server expiration timer
+  const [expireCountdown, setExpireCountdown] = useState(600);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
+  // Mask email helper
+  const maskEmail = (str: string) => {
+    if (!str || !str.includes("@")) return str || "your email";
+    const [local, domain] = str.split("@");
+    if (local.length <= 2) return `${local[0]}***@${domain}`;
+    return `${local[0]}***${local[local.length - 1]}@${domain}`;
+  };
+
   // Countdown timer for resend OTP
   useEffect(() => {
-    if (step === "otp" && countdown > 0 && !canResend) {
-      const timer = setTimeout(() => setCountdown((prev) => prev - 1), 1000);
+    if (step === "otp" && resendCountdown > 0 && !canResend) {
+      const timer = setTimeout(() => setResendCountdown((prev) => prev - 1), 1000);
       return () => clearTimeout(timer);
-    } else if (countdown === 0) {
+    } else if (resendCountdown === 0) {
       setCanResend(true);
     }
-  }, [step, countdown, canResend]);
+  }, [step, resendCountdown, canResend]);
+
+  // Expire countdown timer (10 minutes)
+  useEffect(() => {
+    if (step === "otp" && expireCountdown > 0) {
+      const timer = setTimeout(() => setExpireCountdown((prev) => prev - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [step, expireCountdown]);
+
+  const formatTimer = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
 
   const handleSendEmail = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +77,8 @@ export default function ForgotPasswordPage() {
       setLoading(false);
       if (res.ok) {
         setStep("otp");
-        setCountdown(60);
+        setResendCountdown(60);
+        setExpireCountdown(600);
         setCanResend(false);
       } else {
         setErrorMsg(data.message || "Failed to process request. Please try again.");
@@ -151,7 +179,8 @@ export default function ForgotPasswordPage() {
       if (res.ok) {
         setResentNotice(true);
         setCanResend(false);
-        setCountdown(60);
+        setResendCountdown(60);
+        setExpireCountdown(600);
       } else {
         setErrorMsg(data.message || "Failed to resend code.");
       }
@@ -177,7 +206,7 @@ export default function ForgotPasswordPage() {
           <div className="text-center mb-6">
             <h1 className="text-3xl font-extrabold text-white tracking-tight">Reset your password</h1>
             <p className="mt-2 text-sm text-slate-400">
-              Enter your email and we&apos;ll send you a secure 6-digit verification code.
+              Enter your email and we&apos;ll send you a 6-digit verification code.
             </p>
           </div>
 
@@ -227,7 +256,7 @@ export default function ForgotPasswordPage() {
           <div className="text-center mb-6">
             <h1 className="text-3xl font-extrabold text-white tracking-tight">Verify reset code</h1>
             <p className="mt-2 text-sm text-slate-400">
-              We&apos;ve sent a 6-digit code to <span className="text-emerald-400 font-mono font-bold">{email}</span>
+              We&apos;ve sent a 6-digit code to <span className="text-emerald-400 font-mono font-bold">{maskEmail(email)}</span>
             </p>
           </div>
 
@@ -253,6 +282,8 @@ export default function ForgotPasswordPage() {
                     key={idx}
                     ref={(el) => { inputRefs.current[idx] = el; }}
                     type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     maxLength={1}
                     value={digit}
                     onChange={(e) => handleOtpChange(idx, e.target.value)}
@@ -279,21 +310,28 @@ export default function ForgotPasswordPage() {
               </button>
             </form>
 
-            <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs text-slate-400">
-              <span>Didn&apos;t receive code?</span>
-              <button
-                onClick={handleResendOtp}
-                disabled={!canResend || resending}
-                className="text-emerald-400 font-semibold hover:underline flex items-center gap-1 disabled:opacity-50 disabled:no-underline"
-              >
-                {resending ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                ) : canResend ? (
-                  "Resend Code"
-                ) : (
-                  `Resend in ${countdown}s`
-                )}
-              </button>
+            <div className="space-y-2 pt-2 border-t border-slate-800 text-xs text-slate-400">
+              <div className="flex items-center justify-center gap-1.5 text-slate-400 font-mono">
+                <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Code expires in: <strong className="text-white">{formatTimer(expireCountdown)}</strong></span>
+              </div>
+
+              <div className="flex items-center justify-between pt-1 font-medium">
+                <span>Didn&apos;t receive code?</span>
+                <button
+                  onClick={handleResendOtp}
+                  disabled={!canResend || resending}
+                  className="text-emerald-400 font-semibold hover:underline flex items-center gap-1 disabled:opacity-50 disabled:no-underline"
+                >
+                  {resending ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : canResend ? (
+                    "Resend code"
+                  ) : (
+                    `Resend in ${resendCountdown}s`
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </>

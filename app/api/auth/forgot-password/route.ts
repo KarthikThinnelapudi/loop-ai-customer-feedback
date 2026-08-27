@@ -51,23 +51,24 @@ export async function POST(req: Request) {
       },
     });
 
-    // Save 6-digit OTP token (15 Minutes Expiration)
+    // Save 6-digit OTP token (10 Minutes Expiration)
     await db.verificationToken.create({
       data: {
         identifier: normalizedEmail,
         token: otpCode,
-        expires: new Date(Date.now() + 15 * 60 * 1000),
+        expires: new Date(Date.now() + 10 * 60 * 1000),
       },
     });
 
     const baseUrl = process.env.NEXTAUTH_URL || "https://customerloop.in";
-    const resetUrl = `${baseUrl}/reset-password?email=${encodeURIComponent(normalizedEmail)}&token=${tokenStr}`;
+    const resetUrl = `${baseUrl}/reset-password?email=${encodeURIComponent(normalizedEmail)}`;
 
     await sendPasswordResetEmail({
       to: normalizedEmail,
       name: user.name || "Customer",
+      code: otpCode,
+      expiresMinutes: 10,
       resetUrl,
-      expiresHours: 1,
     });
 
     return NextResponse.json(

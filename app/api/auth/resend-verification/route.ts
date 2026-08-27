@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import crypto from "crypto";
 import { db } from "@/lib/db";
 import { sendVerificationEmail } from "@/lib/email";
 
@@ -26,39 +27,50 @@ export async function POST(req: Request) {
 
     if (!user) {
       return NextResponse.json(
-        { message: "If account exists, a new verification link has been sent." },
+        { message: "If account exists, a new verification code has been sent." },
         { status: 200, headers }
       );
     }
 
-    const tokenStr = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const otpCode = crypto.randomInt(100000, 999999).toString();
+    const tokenStr = crypto.randomBytes(32).toString("hex");
 
     // Delete older verification tokens for this identifier
     await db.verificationToken.deleteMany({
       where: { identifier: normalizedEmail },
     });
 
-    // Create 24-hour verification token
+    // Create 10-minute OTP verification token
+    await db.verificationToken.create({
+      data: {
+        identifier: normalizedEmail,
+        token: otpCode,
+        expires: new Date(Date.now() + 10 * 60 * 1000), // 10 Minutes
+      },
+    });
+
+    // Fallback link token
     await db.verificationToken.create({
       data: {
         identifier: normalizedEmail,
         token: tokenStr,
-        expires: new Date(Date.now() + 24 * 3600 * 1000), // 24 Hours
+        expires: new Date(Date.now() + 24 * 3600 * 1000),
       },
     });
 
     const baseUrl = process.env.NEXTAUTH_URL || "https://customerloop.in";
-    const verifyUrl = `${baseUrl}/verify-email?email=${encodeURIComponent(normalizedEmail)}&token=${tokenStr}`;
+    const verifyUrl = `${baseUrl}/verify-email?email=${encodeURIComponent(normalizedEmail)}`;
 
     await sendVerificationEmail({
       to: normalizedEmail,
       name: user.name || "Customer",
+      code: otpCode,
+      expiresMinutes: 10,
       verifyUrl,
-      expiresHours: 24,
     });
 
     return NextResponse.json(
-      { message: "A new verification email has been sent to your address." },
+      { message: "A new 6-digit OTP verification code has been sent to your email." },
       { status: 200, headers }
     );
   } catch (error) {
@@ -66,6 +78,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: error.issues[0]?.message }, { status: 400, headers });
     }
     console.error("Resend Verification Error:", error);
-    return NextResponse.json({ message: "Failed to resend verification email." }, { status: 500, headers });
+    return NextResponse.json({ message: "Failed to resend verification OTP." }, { status: 500, headers });
   }
 }

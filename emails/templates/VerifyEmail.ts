@@ -1,56 +1,57 @@
 import { renderEmailContainer } from "../components/EmailContainer";
-import { renderEmailButton } from "../components/EmailButton";
 
 export interface VerifyEmailProps {
   name: string;
-  verifyUrl: string;
   code?: string;
+  expiresMinutes?: number;
   expiresHours?: number;
+  verifyUrl?: string;
 }
 
 export function renderVerifyEmail({
   name,
-  verifyUrl,
-  code,
-  expiresHours = 24,
+  code = "123456",
+  expiresMinutes,
+  expiresHours = 0.1667, // Default 10 minutes (0.1667 hours)
 }: VerifyEmailProps): {
   subject: string;
   html: string;
   text: string;
 } {
-  const subject = "Verify your LOOP AI Email Address";
-  const previewText = "Please verify your email address to complete your LOOP AI account setup.";
+  const displayMinutes = expiresMinutes || Math.round(expiresHours * 60);
+  const subject = `${code} is your LOOP AI email verification code`;
+  const previewText = `Your 6-digit verification code for LOOP AI is ${code}. Expires in ${displayMinutes} minutes.`;
 
   const contentHtml = `
-    <h1 style="font-family: 'Inter', -apple-system, sans-serif; font-size: 22px; font-weight: 700; color: #f8fafc; margin: 0 0 16px 0;">
-      Verify Your Email Address
-    </h1>
-    <p style="font-family: 'Inter', -apple-system, sans-serif; font-size: 15px; color: #cbd5e1; line-height: 1.6; margin: 0 0 16px 0;">
-      Hi ${name || "there"}, thank you for signing up for <strong>LOOP AI</strong>. Please verify your email address to activate your workspace:
+    <div style="text-align: center; margin-bottom: 24px;">
+      <span style="font-family: 'Inter', -apple-system, sans-serif; font-size: 11px; font-weight: 700; color: #10b981; text-transform: uppercase; letter-spacing: 2px;">LOOP AI ENTERPRISE</span>
+      <h1 style="font-family: 'Inter', -apple-system, sans-serif; font-size: 24px; font-weight: 800; color: #ffffff; margin: 8px 0 0 0; tracking-tight;">
+        Verify Your Email Address
+      </h1>
+    </div>
+
+    <p style="font-family: 'Inter', -apple-system, sans-serif; font-size: 15px; color: #cbd5e1; line-height: 1.6; margin: 0 0 20px 0;">
+      Hi <strong>${name || "there"}</strong>, enter this verification code in LOOP AI to activate your account and access your workspace:
     </p>
 
-    ${
-      code
-        ? `
-    <div style="background-color: #1e293b; border: 1px dashed #334155; border-radius: 8px; padding: 16px; text-align: center; margin: 20px 0;">
-      <span style="font-family: monospace; font-size: 28px; font-weight: 800; color: #10b981; letter-spacing: 6px;">${code}</span>
-      <p style="font-family: sans-serif; font-size: 12px; color: #94a3b8; margin: 8px 0 0 0;">Verification Code</p>
-    </div>
-    `
-        : ""
-    }
-
-    ${renderEmailButton({ href: verifyUrl, text: "Verify Email Address", variant: "primary" })}
-
-    <div style="background-color: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; padding: 12px 16px; border-radius: 4px; margin-top: 24px;">
-      <p style="font-family: sans-serif; font-size: 13px; color: #fbbf24; margin: 0; line-height: 1.5;">
-        ⏳ <strong>Expiration Notice:</strong> This verification link will expire in <strong>${expiresHours} hours</strong>. If expired, you can request a new link from the login page.
+    <!-- Prominent 6-Digit OTP Code Container -->
+    <div style="background-color: #0f172a; border: 2px solid #10b981; border-radius: 12px; padding: 24px; text-align: center; margin: 24px 0; box-shadow: 0 0 25px rgba(16, 185, 129, 0.15);">
+      <span style="font-family: 'JetBrains Mono', Monaco, Consolas, monospace; font-size: 36px; font-weight: 800; color: #10b981; letter-spacing: 10px; display: inline-block;">
+        ${code}
+      </span>
+      <p style="font-family: 'Inter', -apple-system, sans-serif; font-size: 12px; font-weight: 600; color: #94a3b8; margin: 12px 0 0 0; text-transform: uppercase; letter-spacing: 1px;">
+        6-Digit Verification Code
       </p>
     </div>
 
-    <p style="font-family: sans-serif; font-size: 12px; color: #94a3b8; margin-top: 16px;">
-      If the button above does not work, copy and paste this URL into your browser:<br/>
-      <a href="${verifyUrl}" style="color: #10b981; word-break: break-all;">${verifyUrl}</a>
+    <div style="background-color: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; padding: 12px 16px; border-radius: 6px; margin-top: 24px;">
+      <p style="font-family: 'Inter', -apple-system, sans-serif; font-size: 13px; color: #fbbf24; margin: 0; line-height: 1.5;">
+        ⏳ <strong>Security Expiration:</strong> This code expires in <strong>${displayMinutes} minutes</strong>. Do not share this code with anyone.
+      </p>
+    </div>
+
+    <p style="font-family: 'Inter', -apple-system, sans-serif; font-size: 13px; color: #64748b; margin-top: 24px; line-height: 1.5;">
+      If you did not request this verification code, you can safely ignore this email.
     </p>
   `;
 
@@ -62,7 +63,7 @@ export function renderVerifyEmail({
     showUnsubscribe: false,
   });
 
-  const text = `Hi ${name},\n\nPlease verify your email address for LOOP AI by opening this link: ${verifyUrl}\n${code ? `Verification Code: ${code}\n` : ""}Link expires in ${expiresHours} hours.`;
+  const text = `LOOP AI ENTERPRISE\nVerify Your Email Address\n\nHi ${name},\n\nYour 6-digit verification code is:\n\n${code}\n\nEnter this code in LOOP AI to verify your email address.\n\nThis code expires in ${displayMinutes} minutes. Do not share this code with anyone.\nIf you didn't request this code, safely ignore this email.`;
 
   return { subject, html, text };
 }

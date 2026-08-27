@@ -91,7 +91,7 @@ export async function POST(req: Request) {
         where: { identifier: normalizedEmail },
       });
 
-      // Save link token (24 Hours expiration)
+      // Save link token (Fallback 24 Hours)
       await tx.verificationToken.create({
         data: {
           identifier: normalizedEmail,
@@ -100,12 +100,12 @@ export async function POST(req: Request) {
         },
       });
 
-      // Save 6-digit OTP token (15 Minutes secure expiration)
+      // Save 6-digit OTP token (10 Minutes Expiration)
       await tx.verificationToken.create({
         data: {
           identifier: normalizedEmail,
           token: otpCode,
-          expires: new Date(Date.now() + 15 * 60 * 1000),
+          expires: new Date(Date.now() + 10 * 60 * 1000),
         },
       });
 
@@ -116,23 +116,24 @@ export async function POST(req: Request) {
           action: "WORKSPACE_REGISTERED",
           entityType: "Workspace",
           entityId: workspace.id,
-          details: `Created workspace ${workspace.name} and Admin account for ${user.email} (Pending Email Verification)`,
+          details: `Created workspace ${workspace.name} and Admin account for ${user.email} (Pending Email OTP Verification)`,
         },
       });
 
       return { workspace, user };
     });
 
-    // Dispatch Verification Email with 6-digit OTP code & link
+    // Dispatch Verification Email with 6-digit OTP code prominently
     try {
       const baseUrl = process.env.NEXTAUTH_URL || "https://customerloop.in";
-      const verifyUrl = `${baseUrl}/verify-email?email=${encodeURIComponent(normalizedEmail)}&token=${tokenStr}`;
+      const verifyUrl = `${baseUrl}/verify-email?email=${encodeURIComponent(normalizedEmail)}`;
 
       await sendVerificationEmail({
         to: normalizedEmail,
         name: validatedData.name,
+        code: otpCode,
+        expiresMinutes: 10,
         verifyUrl,
-        expiresHours: 24,
       });
     } catch (emailErr) {
       console.warn("Non-fatal verification email dispatch warning:", emailErr);
