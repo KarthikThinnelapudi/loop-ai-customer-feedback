@@ -5,8 +5,9 @@ import { useSession } from "next-auth/react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
 import Modal from "@/components/common/Modal";
+import EmptyState from "@/components/common/EmptyState";
 import { hasPermission } from "@/lib/rbac";
-import { Users, UserPlus, Shield, Trash2, ShieldAlert } from "lucide-react";
+import { Users, UserPlus, Shield, Trash2, ShieldAlert, Loader2 } from "lucide-react";
 
 interface Member {
   id: string;
@@ -16,12 +17,6 @@ interface Member {
   status: "ACTIVE" | "PENDING";
 }
 
-const mockMembers: Member[] = [
-  { id: "m-1", name: "Alex Mercer", email: "alex@acme.com", role: "ADMIN", status: "ACTIVE" },
-  { id: "m-2", name: "Sarah Jenkins", email: "sarah@acme.com", role: "ANALYST", status: "ACTIVE" },
-  { id: "m-3", name: "David Kim", email: "david@acme.com", role: "VIEWER", status: "ACTIVE" },
-];
-
 export default function TeamPage() {
   const { data: session } = useSession();
   const userRole = (session?.user as { role?: string })?.role?.toUpperCase() || "VIEWER";
@@ -30,18 +25,22 @@ export default function TeamPage() {
   const canInvite = hasPermission(userRole, "users:invite");
   const canManageRoles = hasPermission(userRole, "users:manage");
 
-  const [members, setMembers] = useState<Member[]>(mockMembers);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "ANALYST" | "VIEWER">("ANALYST");
 
   useEffect(() => {
-    if (!canViewTeam) return;
+    if (!canViewTeam) {
+      setLoading(false);
+      return;
+    }
 
     fetch("/api/members")
       .then((res) => (res.ok ? res.json() : null))
       .then((apiMembers) => {
-        if (Array.isArray(apiMembers) && apiMembers.length > 0) {
+        if (Array.isArray(apiMembers)) {
           const mapped = apiMembers.map((m: { id: string; role: string; user: { name?: string; email: string } }) => ({
             id: m.id,
             name: m.user?.name || m.user?.email.split("@")[0],
@@ -52,7 +51,8 @@ export default function TeamPage() {
           setMembers(mapped);
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [canViewTeam]);
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -163,65 +163,81 @@ export default function TeamPage() {
         </div>
       </div>
 
-      {/* Members Table */}
+      {/* Members Table / Empty State */}
       <Card className="p-0 overflow-hidden">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-slate-950 border-b border-slate-800 text-slate-400 font-mono uppercase tracking-wider">
-            <tr>
-              <th className="py-4 px-6">Member Name</th>
-              <th className="py-4 px-6">Email Address</th>
-              <th className="py-4 px-6">Assigned RBAC Role</th>
-              <th className="py-4 px-6">Status</th>
-              {canManageRoles && <th className="py-4 px-6 text-right">Actions</th>}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800/60 text-slate-300">
-            {members.map((m) => (
-              <tr key={m.id} className="hover:bg-slate-900/50 transition">
-                <td className="py-4 px-6 font-semibold text-white">{m.name}</td>
-                <td className="py-4 px-6 font-mono text-slate-400">{m.email}</td>
-                <td className="py-4 px-6">
-                  {canManageRoles ? (
-                    <select
-                      value={m.role}
-                      onChange={(e) =>
-                        handleRoleChange(m.id, e.target.value as "ADMIN" | "ANALYST" | "VIEWER")
-                      }
-                      className="bg-slate-950 border border-slate-800 text-xs font-bold text-slate-200 rounded-lg px-2.5 py-1 focus:outline-none focus:border-emerald-500"
-                    >
-                      <option value="ADMIN">ADMIN</option>
-                      <option value="ANALYST">ANALYST</option>
-                      <option value="VIEWER">VIEWER</option>
-                    </select>
-                  ) : (
-                    <span className="font-bold text-slate-300">{m.role}</span>
-                  )}
-                </td>
-                <td className="py-4 px-6">
-                  <span
-                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                      m.status === "ACTIVE"
-                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                        : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                    }`}
-                  >
-                    {m.status}
-                  </span>
-                </td>
-                {canManageRoles && (
-                  <td className="py-4 px-6 text-right">
-                    <button
-                      onClick={() => setMembers(members.filter((item) => item.id !== m.id))}
-                      className="p-1.5 rounded bg-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {loading ? (
+          <div className="p-12 text-center text-slate-400 font-mono text-xs flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+            <span>Loading team members...</span>
+          </div>
+        ) : members.length === 0 ? (
+          <EmptyState
+            title="No Team Members Found"
+            description="Invite teammates to collaborate in your active workspace with role-based access control."
+            actionLabel={canInvite ? "Invite Teammate" : undefined}
+            onAction={canInvite ? () => setShowInviteModal(true) : undefined}
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-950 border-b border-slate-800 text-slate-400 font-mono uppercase tracking-wider">
+                <tr>
+                  <th className="py-4 px-6">Member Name</th>
+                  <th className="py-4 px-6">Email Address</th>
+                  <th className="py-4 px-6">Assigned RBAC Role</th>
+                  <th className="py-4 px-6">Status</th>
+                  {canManageRoles && <th className="py-4 px-6 text-right">Actions</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                {members.map((m) => (
+                  <tr key={m.id} className="hover:bg-slate-900/50 transition">
+                    <td className="py-4 px-6 font-semibold text-white">{m.name}</td>
+                    <td className="py-4 px-6 font-mono text-slate-400">{m.email}</td>
+                    <td className="py-4 px-6">
+                      {canManageRoles ? (
+                        <select
+                          value={m.role}
+                          onChange={(e) =>
+                            handleRoleChange(m.id, e.target.value as "ADMIN" | "ANALYST" | "VIEWER")
+                          }
+                          className="bg-slate-950 border border-slate-800 text-xs font-bold text-slate-200 rounded-lg px-2.5 py-1 focus:outline-none focus:border-emerald-500"
+                        >
+                          <option value="ADMIN">ADMIN</option>
+                          <option value="ANALYST">ANALYST</option>
+                          <option value="VIEWER">VIEWER</option>
+                        </select>
+                      ) : (
+                        <span className="font-bold text-slate-300">{m.role}</span>
+                      )}
+                    </td>
+                    <td className="py-4 px-6">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          m.status === "ACTIVE"
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                            : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                        }`}
+                      >
+                        {m.status}
+                      </span>
+                    </td>
+                    {canManageRoles && (
+                      <td className="py-4 px-6 text-right">
+                        <button
+                          onClick={() => setMembers(members.filter((item) => item.id !== m.id))}
+                          className="p-1.5 rounded bg-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
 
       {/* Invite Modal */}

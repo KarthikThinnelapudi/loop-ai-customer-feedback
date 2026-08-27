@@ -51,7 +51,7 @@ export default function Sidebar({
   const { data: session } = useSession();
 
   const userRole = (session?.user as { role?: string })?.role?.toUpperCase() || "ADMIN";
-  const workspaceName = (session?.user as { workspaceName?: string })?.workspaceName || "Acme Production Workspace";
+  const workspaceName = (session?.user as { workspaceName?: string })?.workspaceName || "My Workspace";
 
   const navItems = allNavItems.filter((item) => item.roles.includes(userRole));
   const workspaceItems = allWorkspaceItems.filter((item) => item.roles.includes(userRole));
@@ -187,7 +187,7 @@ export default function Sidebar({
               </div>
               <div className="truncate">
                 <p className="text-xs font-semibold text-white truncate">{session?.user?.name || "User"}</p>
-                <p className="text-[10px] text-slate-400 truncate">{session?.user?.email || "user@acme.com"}</p>
+                <p className="text-[10px] text-slate-400 truncate">{session?.user?.email || "user@customerloop.in"}</p>
               </div>
             </div>
           ) : (

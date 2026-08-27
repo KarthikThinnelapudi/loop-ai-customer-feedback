@@ -1,27 +1,75 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/common/Card";
 import SecretKeyMasker from "@/components/common/SecretKeyMasker";
 import { hasPermission } from "@/lib/rbac";
-import { Building, Key, CheckCircle2, Save, ShieldAlert } from "lucide-react";
+import { Building, Key, CheckCircle2, Save, ShieldAlert, Loader2 } from "lucide-react";
 
 export default function SettingsPage() {
-  const { data: session } = useSession();
+  const { data: session, update } = useSession();
   const userRole = (session?.user as { role?: string })?.role?.toUpperCase() || "VIEWER";
+  const sessionWorkspaceName = (session?.user as { workspaceName?: string })?.workspaceName || "";
+  const sessionWorkspaceId = (session?.user as { workspaceId?: string })?.workspaceId || "";
 
   const canManageSettings = hasPermission(userRole, "workspace:settings");
 
-  const [workspaceName, setWorkspaceName] = useState("Acme Production Workspace");
+  const [workspaceName, setWorkspaceName] = useState(sessionWorkspaceName);
+  const [workspaceId, setWorkspaceId] = useState(sessionWorkspaceId);
+  const [apiKey, setApiKey] = useState("loop_live_sk_loading");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const handleSave = (e: React.FormEvent) => {
+  useEffect(() => {
+    fetch("/api/workspaces")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.workspace) {
+          setWorkspaceName(data.workspace.name);
+          setWorkspaceId(data.workspace.id);
+          setApiKey(data.workspace.apiKey || `loop_live_sk_${data.workspace.id.slice(-8)}`);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canManageSettings) return;
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (!canManageSettings || saving) return;
+
+    setSaving(true);
+    setErrorMsg("");
+    setSaved(false);
+
+    try {
+      const res = await fetch("/api/workspaces", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: workspaceName }),
+      });
+
+      const data = await res.json();
+      setSaving(false);
+
+      if (res.ok) {
+        setSaved(true);
+        // Trigger NextAuth session update to refresh workspace name across topbar/sidebar
+        if (update) {
+          update({ workspaceName: data.workspace.name });
+        }
+        setTimeout(() => setSaved(false), 3000);
+      } else {
+        setErrorMsg(data.message || "Failed to update workspace settings.");
+      }
+    } catch {
+      setSaving(false);
+      setErrorMsg("Network error updating workspace settings.");
+    }
   };
 
   if (!canManageSettings) {
@@ -66,48 +114,63 @@ export default function SettingsPage() {
             General Workspace Info
           </h3>
 
-          <form onSubmit={handleSave} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                Workspace Name
-              </label>
-              <input
-                type="text"
-                value={workspaceName}
-                onChange={(e) => setWorkspaceName(e.target.value)}
-                className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition"
-              />
+          {loading ? (
+            <div className="p-8 text-center text-slate-400 font-mono text-xs flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+              <span>Loading workspace configuration...</span>
             </div>
+          ) : (
+            <form onSubmit={handleSave} className="space-y-4">
+              {errorMsg && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+                  {errorMsg}
+                </div>
+              )}
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                Workspace Unique Identifier (Tenant Key)
-              </label>
-              <input
-                type="text"
-                disabled
-                value="ws_acme_prod_9921"
-                className="w-full p-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-500 font-mono text-sm cursor-not-allowed"
-              />
-              <p className="text-[11px] text-slate-500 mt-1">Used for backend multi-tenant data query scoping.</p>
-            </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                  Workspace Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={workspaceName}
+                  onChange={(e) => setWorkspaceName(e.target.value)}
+                  className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition font-medium"
+                />
+              </div>
 
-            <div className="flex items-center justify-between pt-2">
-              {saved ? (
-                <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
-                  <CheckCircle2 className="w-4 h-4" /> Workspace updated successfully!
-                </span>
-              ) : <span />}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                  Workspace Unique Identifier (Tenant Key)
+                </label>
+                <input
+                  type="text"
+                  disabled
+                  value={workspaceId || "ws_active_tenant"}
+                  className="w-full p-3 bg-slate-950/50 border border-slate-800 rounded-xl text-emerald-400 font-mono text-sm cursor-not-allowed font-semibold"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">Used for backend multi-tenant database query scoping.</p>
+              </div>
 
-              <button
-                type="submit"
-                className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shadow-md transition flex items-center gap-2"
-              >
-                <Save className="w-4 h-4" />
-                <span>Save Changes</span>
-              </button>
-            </div>
-          </form>
+              <div className="flex items-center justify-between pt-2">
+                {saved ? (
+                  <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="w-4 h-4" /> Workspace updated successfully!
+                  </span>
+                ) : <span />}
+
+                <button
+                  type="submit"
+                  disabled={saving || !workspaceName}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shadow-md transition flex items-center gap-2 disabled:opacity-50"
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  <span>{saving ? "Saving Changes..." : "Save Changes"}</span>
+                </button>
+              </div>
+            </form>
+          )}
         </Card>
 
         {/* Security & API Keys Card */}
@@ -122,7 +185,7 @@ export default function SettingsPage() {
 
           <SecretKeyMasker
             label="Live Ingestion Secret Key"
-            secretKey="loop_live_sk_9921481948194819"
+            secretKey={apiKey}
             prefix="loop_live_sk_"
             userRole={userRole}
             onRegenerate={() => {

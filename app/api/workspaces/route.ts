@@ -19,8 +19,10 @@ export async function GET() {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
+    const sessionUser = session.user as { email: string; workspaceId?: string };
+
     const user = await db.user.findUnique({
-      where: { email: session.user.email },
+      where: { email: sessionUser.email },
       include: {
         memberships: {
           include: {
@@ -34,16 +36,73 @@ export async function GET() {
       return NextResponse.json({ message: "Workspace not found" }, { status: 404 });
     }
 
-    const primaryWorkspace = user.memberships[0].workspace;
-    const role = user.memberships[0].role;
+    // Match session workspaceId if present, otherwise fallback to primary membership
+    const targetMembership =
+      user.memberships.find((m) => m.workspaceId === sessionUser.workspaceId) ||
+      user.memberships[0];
 
     return NextResponse.json({
-      workspace: primaryWorkspace,
-      userRole: role,
+      workspace: targetMembership.workspace,
+      userRole: targetMembership.role,
     });
   } catch (error) {
     console.error("GET Workspace Error:", error);
     return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
+    const sessionUser = session.user as { email: string; workspaceId?: string; role?: string };
+
+    const user = await db.user.findUnique({
+      where: { email: sessionUser.email },
+      include: { memberships: true },
+    });
+
+    if (!user) {
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
+    }
+
+    const targetMembership =
+      user.memberships.find((m) => m.workspaceId === sessionUser.workspaceId) ||
+      user.memberships[0];
+
+    const role = targetMembership?.role || sessionUser.role || "VIEWER";
+
+    // Strict RBAC Enforcement: Only Owner/Admin can modify workspace settings
+    if (!hasPermission(role, "workspace:settings")) {
+      return NextResponse.json(
+        { message: "Forbidden: Analysts, Viewers, and non-admin roles cannot modify workspace settings." },
+        { status: 403 }
+      );
+    }
+
+    const body = await req.json();
+    const data = workspaceSchema.parse(body);
+
+    const updatedWorkspace = await db.workspace.update({
+      where: { id: targetMembership.workspaceId },
+      data: {
+        name: data.name,
+        description: data.description,
+        industry: data.industry,
+        teamSize: data.teamSize,
+      },
+    });
+
+    return NextResponse.json({ workspace: updatedWorkspace }, { status: 200 });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ message: error.issues[0]?.message }, { status: 400 });
+    }
+    console.error("PATCH Workspace Error:", error);
+    return NextResponse.json({ message: "Failed to update workspace" }, { status: 500 });
   }
 }
 
