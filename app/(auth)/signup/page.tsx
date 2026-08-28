@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Building, User, Mail, Lock, Eye, EyeOff, ArrowRight, CheckCircle2, AlertCircle, Sparkles, Upload, FileText } from "lucide-react";
 
-
 const industries = ["SaaS / Software", "E-Commerce", "Fintech", "Developer Tools", "Healthcare", "EdTech", "Agency / Services"];
 const teamSizes = ["1-10 Employees", "11-50 Employees", "51-200 Employees", "200+ Enterprise"];
 
@@ -67,12 +66,14 @@ export default function SignupPage() {
         }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data.message || "Failed to create workspace account.");
       }
 
-      router.push("/login?registered=true");
+      // Automatically transition to 6-digit OTP verification screen with user's email
+      router.push(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -137,7 +138,6 @@ export default function SignupPage() {
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={logoPreview} alt="Logo preview" className="w-full h-full object-cover" />
                 ) : (
-
                   <Building className="w-6 h-6 text-emerald-400" />
                 )}
               </div>
@@ -323,4 +323,3 @@ export default function SignupPage() {
     </motion.div>
   );
 }
-

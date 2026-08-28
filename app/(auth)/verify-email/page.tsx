@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Mail, CheckCircle2, AlertCircle, RefreshCw, ArrowRight, Edit3, Clock } from "lucide-react";
+import { Mail, CheckCircle2, AlertCircle, RefreshCw, ArrowRight, Edit3, Clock, Sparkles } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ function VerifyEmailContent() {
   const [errorMsg, setErrorMsg] = useState("");
   const [resending, setResending] = useState(false);
   const [resentNotice, setResentNotice] = useState(false);
-  
+
   // 60s resend cooldown timer
   const [resendCountdown, setResendCountdown] = useState(60);
   const [canResend, setCanResend] = useState(false);
@@ -124,7 +124,7 @@ function VerifyEmailContent() {
         setSuccess(true);
         setTimeout(() => {
           router.push("/dashboard?welcome=true");
-        }, 2000);
+        }, 2200);
       } else {
         setErrorMsg(data.message || "Invalid or expired OTP code.");
       }
@@ -173,138 +173,161 @@ function VerifyEmailContent() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="rounded-3xl border border-slate-800 bg-slate-900/80 backdrop-blur-2xl p-8 shadow-[0_0_60px_rgba(16,185,129,0.1)] text-center max-w-md mx-auto"
+      className="rounded-3xl border border-slate-800 bg-slate-900/80 backdrop-blur-2xl p-8 shadow-[0_0_60px_rgba(16,185,129,0.1)] text-center max-w-md mx-auto relative"
     >
-      <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center mb-6">
-        <Mail className="w-7 h-7" />
-      </div>
-
-      <h1 className="text-3xl font-extrabold text-white tracking-tight">Verify your email</h1>
-      <p className="mt-2 text-sm text-slate-400">
-        We&apos;ve sent a 6-digit verification code to:
-      </p>
-
-      {/* Email Display & Edit Bar */}
-      <div className="mt-2 flex items-center justify-center gap-2">
-        {!isEditingEmail ? (
-          <>
-            <span className="font-mono text-emerald-400 text-sm font-bold truncate max-w-[240px]">
-              {maskEmail(email || emailParam)}
-            </span>
-            <button
-              onClick={() => setIsEditingEmail(true)}
-              className="text-slate-400 hover:text-white p-1 transition"
-              title="Change Email"
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-            </button>
-          </>
-        ) : (
-          <div className="flex items-center gap-2 w-full max-w-xs mt-1">
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs w-full focus:outline-none focus:border-emerald-500"
-            />
-            <button
-              onClick={() => setIsEditingEmail(false)}
-              className="px-3 py-1.5 rounded-lg bg-emerald-500 text-white font-bold text-xs hover:bg-emerald-600 transition"
-            >
-              Save
-            </button>
+      {!success ? (
+        <>
+          <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center mb-6">
+            <Mail className="w-7 h-7" />
           </div>
-        )}
-      </div>
 
-      {verifying ? (
-        <div className="py-8 space-y-3">
-          <div className="inline-block w-8 h-8 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-          <p className="text-sm text-slate-300">Validating 6-digit OTP code...</p>
-        </div>
-      ) : success ? (
-        <div className="py-6 space-y-4">
-          <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm flex items-center justify-center gap-2">
-            <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
-            <span>Email verified successfully! Opening your workspace...</span>
+          <h1 className="text-3xl font-extrabold text-white tracking-tight">Verify Your Email</h1>
+          <p className="mt-2 text-sm text-slate-400">
+            We&apos;ve sent a verification code to your email address.
+          </p>
+
+          {/* Email Display & Edit Bar */}
+          <div className="mt-3 flex items-center justify-center gap-2">
+            {!isEditingEmail ? (
+              <>
+                <span className="font-mono text-emerald-400 text-sm font-bold truncate max-w-[240px]">
+                  {maskEmail(email || emailParam)}
+                </span>
+                <button
+                  onClick={() => setIsEditingEmail(true)}
+                  className="text-slate-400 hover:text-white p-1 transition"
+                  title="Change Email"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                </button>
+              </>
+            ) : (
+              <div className="flex items-center gap-2 w-full max-w-xs mt-1">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs w-full focus:outline-none focus:border-emerald-500"
+                />
+                <button
+                  onClick={() => setIsEditingEmail(false)}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-500 text-white font-bold text-xs hover:bg-emerald-600 transition"
+                >
+                  Save
+                </button>
+              </div>
+            )}
           </div>
+
+          {verifying ? (
+            <div className="py-8 space-y-3">
+              <div className="inline-block w-8 h-8 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
+              <p className="text-sm text-slate-300">Validating 6-digit OTP code...</p>
+            </div>
+          ) : (
+            <div className="space-y-6 mt-6">
+              {errorMsg && (
+                <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-center gap-2 text-left">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{errorMsg}</span>
+                </div>
+              )}
+
+              {resentNotice && (
+                <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center justify-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                  <span>New 6-digit verification code sent to your inbox!</span>
+                </div>
+              )}
+
+              {/* 6-Digit OTP Inputs */}
+              <form onSubmit={handleVerifyOtp} className="space-y-6">
+                <div className="flex justify-center gap-2">
+                  {otp.map((digit, idx) => (
+                    <input
+                      key={idx}
+                      ref={(el) => { inputRefs.current[idx] = el; }}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handleOtpChange(idx, e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(idx, e)}
+                      onPaste={idx === 0 ? handlePaste : undefined}
+                      className="w-12 h-14 text-center font-mono text-xl font-bold rounded-xl bg-slate-950 border border-slate-800 text-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition"
+                    />
+                  ))}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={otp.join("").length !== 6 || verifying}
+                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold text-sm shadow-[0_0_25px_rgba(16,185,129,0.25)] transition flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <span>Verify OTP</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </form>
+
+              {/* Countdown & Resend Section */}
+              <div className="space-y-2 pt-2 border-t border-slate-800 text-xs text-slate-400">
+                <div className="flex items-center justify-center gap-1.5 text-slate-400 font-mono">
+                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Code expires in: <strong className="text-white">{formatTimer(expireCountdown)}</strong></span>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 font-medium">
+                  <span>Didn&apos;t receive the code?</span>
+                  <button
+                    onClick={handleResendOtp}
+                    disabled={!canResend || resending}
+                    className="text-emerald-400 font-semibold hover:underline flex items-center gap-1 disabled:opacity-50 disabled:no-underline"
+                  >
+                    {resending ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : canResend ? (
+                      "Resend OTP"
+                    ) : (
+                      `Resend in ${resendCountdown}s`
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        /* Successful OTP Verification Screen */
+        <div className="py-6 space-y-6">
+          <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 mx-auto flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.3)] animate-bounce">
+            <CheckCircle2 className="w-10 h-10" />
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-2xl font-extrabold text-white tracking-tight">
+              Email Verified Successfully
+            </h2>
+            <p className="text-sm text-slate-300">
+              Your email has been verified successfully. Your workspace is ready!
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium space-y-1.5 text-left">
+            <div className="flex items-center gap-2 text-emerald-400 font-semibold">
+              <Sparkles className="w-4 h-4" />
+              <span>Workspace Admin Credentials Activated</span>
+            </div>
+            <p className="text-slate-400">Welcome email dispatched. Redirecting to your workspace dashboard...</p>
+          </div>
+
           <Link
             href="/dashboard?welcome=true"
-            className="inline-flex items-center justify-center w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm transition shadow-lg shadow-emerald-500/20"
+            className="inline-flex items-center justify-center w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold text-sm transition shadow-[0_0_30px_rgba(16,185,129,0.3)] gap-2"
           >
-            Go to Workspace Dashboard
+            <span>Continue to Workspace</span>
+            <ArrowRight className="w-4 h-4" />
           </Link>
-        </div>
-      ) : (
-        <div className="space-y-6 mt-6">
-          {errorMsg && (
-            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-center gap-2 text-left">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{errorMsg}</span>
-            </div>
-          )}
-
-          {resentNotice && (
-            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center justify-center gap-2">
-              <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-              <span>New 6-digit verification code sent to your inbox!</span>
-            </div>
-          )}
-
-          {/* 6-Digit OTP Boxes */}
-          <form onSubmit={handleVerifyOtp} className="space-y-6">
-            <div className="flex justify-center gap-2">
-              {otp.map((digit, idx) => (
-                <input
-                  key={idx}
-                  ref={(el) => { inputRefs.current[idx] = el; }}
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={1}
-                  value={digit}
-                  onChange={(e) => handleOtpChange(idx, e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(idx, e)}
-                  onPaste={idx === 0 ? handlePaste : undefined}
-                  className="w-12 h-14 text-center font-mono text-xl font-bold rounded-xl bg-slate-950 border border-slate-800 text-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition"
-                />
-              ))}
-            </div>
-
-            <button
-              type="submit"
-              disabled={otp.join("").length !== 6 || verifying}
-              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold text-sm shadow-[0_0_25px_rgba(16,185,129,0.25)] transition flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <span>Verify Email</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
-
-          {/* Countdown & Resend Section */}
-          <div className="space-y-2 pt-2 border-t border-slate-800 text-xs text-slate-400">
-            <div className="flex items-center justify-center gap-1.5 text-slate-400 font-mono">
-              <Clock className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Code expires in: <strong className="text-white">{formatTimer(expireCountdown)}</strong></span>
-            </div>
-
-            <div className="flex items-center justify-between pt-1 font-medium">
-              <span>Didn&apos;t receive the code?</span>
-              <button
-                onClick={handleResendOtp}
-                disabled={!canResend || resending}
-                className="text-emerald-400 font-semibold hover:underline flex items-center gap-1 disabled:opacity-50 disabled:no-underline"
-              >
-                {resending ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                ) : canResend ? (
-                  "Resend code"
-                ) : (
-                  `Resend in ${resendCountdown}s`
-                )}
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </motion.div>
